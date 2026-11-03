@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<!--
+===============================================================================
+  STARTSEITE – Übersicht aller Lernprogramme
+===============================================================================
+  Zweck    : Eine Seite, die auf alle Lernprogramme verlinkt. Gehört ins Repo
+             "probtrot-boop.github.io" und muss dort "index.html" heissen.
+  Annahmen : Die verlinkten Projekte liegen in eigenen Repos desselben Kontos.
+             Repo-Namen entscheiden über die Links – siehe Kommentare unten.
+  Umfang   : Reine Verlinkung, kein Inhalt, keine externen Abhängigkeiten.
+  Aufbau   : 1) CSS mit Farbtokens (hell/dunkel)  2) Kopf  3) Kacheln  4) Fuss
+===============================================================================
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lernprogramme</title>
+<style>
+/* --- Farb- und Masstokens; die dunkle Ansicht setzt nur diese Werte neu --- */
+:root{
+  padding-top:env(safe-area-inset-top,0px);       /* Platz für Statusleiste */
+  padding-bottom:env(safe-area-inset-bottom,0px); /* Platz für Gestenleiste */
+  color-scheme:light;
+  --bg:#f7f4ee;              /* Hintergrund, warmes Papierweiss */
+  --card:#ffffff;            /* Kachelfläche */
+  --ink:#1d222c;             /* Haupttext */
+  --ink-soft:#5c6474;        /* Nebentext */
+  --line:#e4dccf;            /* Ränder */
+  --accent:#e08b1f;          /* Akzent */
+  --auf-akzent:#1d222c;      /* Text auf Akzentfläche */
+  --shadow:0 2px 0 rgba(29,34,44,.05), 0 12px 26px -14px rgba(29,34,44,.3);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#14161b; --card:#1d2027; --ink:#edf1f7; --ink-soft:#a5aebf;
+  --line:#2d323c; --accent:#f0a93c;
+  --shadow:0 2px 0 rgba(0,0,0,.25), 0 12px 26px -14px rgba(0,0,0,.6);
+  color-scheme:dark;
+} }
+:root[data-theme="dark"]{
+  --bg:#14161b; --card:#1d2027; --ink:#edf1f7; --ink-soft:#a5aebf;
+  --line:#2d323c; --accent:#f0a93c;
+  --shadow:0 2px 0 rgba(0,0,0,.25), 0 12px 26px -14px rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+img{max-width:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  line-height:1.6; font-size:17px;
+}
+/* --- Kopf: Seitenabstand mit Sicherheitsrand für Systemleisten --- */
+.wrap{
+  max-width:860px; margin:0 auto; padding-block:48px 64px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.eyebrow{
+  display:inline-block; background:var(--accent); color:var(--auf-akzent);
+  font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+  padding:4px 11px; border-radius:999px; margin-bottom:14px;
+}
+h1{font-size:clamp(30px,6vw,46px); line-height:1.1; letter-spacing:-.02em; margin:0 0 .35em; text-wrap:balance}
+.lead{color:var(--ink-soft); max-width:58ch; margin:0 0 34px}
+/* --- Kacheln: eine Spalte am Handy, zwei ab Tablet --- */
+.kacheln{display:grid; gap:16px}
+@media(min-width:680px){ .kacheln{grid-template-columns:1fr 1fr} }
+.kachel{
+  display:flex; flex-direction:column; gap:10px; min-width:0;
+  background:var(--card); border:1px solid var(--line); border-radius:18px;
+  padding:18px; text-decoration:none; color:inherit; box-shadow:var(--shadow);
+  transition:transform .14s, border-color .14s;
+}
+.kachel:hover{transform:translateY(-3px); border-color:var(--accent)}
+.kachel:focus-visible{outline:3px solid var(--accent); outline-offset:3px}
+.kachel svg{width:100%; height:auto; display:block; border-radius:12px}
+.kachel b{font-size:19px}
+.kachel span{color:var(--ink-soft); font-size:15px}
+footer{margin-top:40px; color:var(--ink-soft); font-size:14px}
+@media (prefers-reduced-motion: reduce){ .kachel{transition:none} .kachel:hover{transform:none} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="eyebrow">Lernprogramme</div>
+  <h1>Zum Anschauen, Ausprobieren und Mitmachen</h1>
+  <p class="lead">Kleine interaktive Seiten zum Lernen – jede läuft direkt im Browser,
+     ohne Installation und ohne Anmeldung. Einfach antippen.</p>
+
+  <div class="kacheln">
+
+    <!-- Kachel 1 – Repo: Brueckenwerkstatt (Name muss exakt so lauten) -->
+    <a class="kachel" href="https://probtrot-boop.github.io/Brueckenwerkstatt/">
+      <svg viewBox="0 0 320 120" aria-hidden="true">
+        <rect width="320" height="120" fill="#e8eef4"/>
+        <rect y="96" width="320" height="24" fill="#c8b79c"/>
+        <rect x="40" y="96" width="240" height="18" fill="#a9c6dd"/>
+        <path d="M50 92 Q160 18 270 92" fill="none" stroke="#e0483a" stroke-width="9"/>
+        <rect x="30" y="60" width="260" height="9" fill="#f3ece1" stroke="#b9ad99"/>
+        <g stroke="#c9bfae" stroke-width="5">
+          <line x1="85" y1="78" x2="85" y2="69"/><line x1="160" y1="60" x2="160" y2="69"/>
+          <line x1="235" y1="78" x2="235" y2="69"/>
+        </g>
+      </svg>
+      <b>Brückenwerkstatt</b>
+      <span>Brückenarten, Kräfte zum Ausprobieren, Papier-Experiment,
+            Da-Vinci-Brücke, Quiz und FAQ.</span>
+    </a>
+
+    <!-- Kachel 2 – Repo: Vitos_Weltraum -->
+    <a class="kachel" href="https://probtrot-boop.github.io/Vitos_Weltraum/">
+      <svg viewBox="0 0 320 120" aria-hidden="true">
+        <rect width="320" height="120" fill="#141a2e"/>
+        <g fill="#ffffff">
+          <circle cx="40" cy="28" r="2"/><circle cx="96" cy="60" r="1.5"/>
+          <circle cx="150" cy="22" r="2.5"/><circle cx="238" cy="40" r="1.8"/>
+          <circle cx="282" cy="80" r="2.2"/><circle cx="62" cy="92" r="1.6"/>
+          <circle cx="200" cy="96" r="1.4"/>
+        </g>
+        <circle cx="180" cy="62" r="30" fill="#e08b1f"/>
+        <ellipse cx="180" cy="62" rx="52" ry="13" fill="none" stroke="#f0d9a8" stroke-width="5"/>
+        <circle cx="78" cy="46" r="11" fill="#7fa6c4"/>
+      </svg>
+      <b>Vitos Weltraum</b>
+      <span>Wie die Erde entstand, wie weit die Sterne wirklich weg sind,
+            schwarze Löcher – und ein Quiz dazu.</span>
+    </a>
+
+    <!-- Kachel 3 – Repo: Giannina_Football -->
+    <a class="kachel" href="https://probtrot-boop.github.io/Giannina_Football/">
+      <svg viewBox="0 0 320 120" aria-hidden="true">
+        <rect width="320" height="120" fill="#2f7d4f"/>
+        <g stroke="#ffffff" stroke-width="3" fill="none" opacity=".85">
+          <rect x="14" y="14" width="292" height="92"/>
+          <line x1="160" y1="14" x2="160" y2="106"/>
+          <circle cx="160" cy="60" r="22"/>
+          <rect x="14" y="36" width="34" height="48"/>
+          <rect x="272" y="36" width="34" height="48"/>
+        </g>
+        <circle cx="160" cy="60" r="13" fill="#ffffff"/>
+        <path d="M160 49 l7 5 -3 9 h-8 l-3 -9 z" fill="#1d222c"/>
+      </svg>
+      <b>Gianninas Fussballregeln</b>
+      <span>Die wichtigsten Regeln für E-Junioren, einfach erklärt,
+            mit Quiz zum Nachprüfen.</span>
+    </a>
+
+  </div>
+
+  <footer>
+    Gebaut für Schule, Verein und Familie · Alle Seiten laufen auch ohne Internet,
+    sobald sie einmal geladen sind.
+  </footer>
+</div>
+
+</body>
+</html>
