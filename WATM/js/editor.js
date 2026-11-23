@@ -14,6 +14,11 @@
               - Datenquelle (Auswahlstelle in loadState): data/rider.json
                 (Klartext, privates Artefakt) -> sonst data/rider.enc.json
                 (verschlüsselt, GitHub; Passwortabfrage) -> sonst Standard.
+   Neu v2.1:  Leere Bühnenfläche antippen (ohne Auswahl) öffnet dasselbe Menü
+              direkt an dieser Stelle; das Element wird genau dort eingefügt.
+   Neu v2:    «＋ Hinzufügen» direkt über dem Bühnenplan (fügt in der sichtbaren
+              Planmitte ein), 🎧-Knopf in der Auswahlleiste (In-Ear aus/Funk/
+              wired je Musiker), Personen-Nr. im Panel, Besetzung automatisch.
    Umfang:    Alle Bedien-Panels; Darstellung selbst in core.js.
    ========================================================================== */
 'use strict';
@@ -78,7 +83,7 @@ function armButton(btn, armedText, action){
 /* ===== STAND PRÜFEN: fehlende Felder aus dem Standard ergänzen ===== */
 function normalize(d){
   const s = clone(DEFAULT_STATE);
-  if (!d || typeof d !== 'object') return migrateInEar(s); // stiller Fallback: Standardstand
+  if (!d || typeof d !== 'object') return s;               // stiller Fallback: Standardstand
   s.meta = Object.assign(s.meta, d.meta || {});
   s.hint = Object.assign(s.hint, d.hint || {});
   s.powerNote = Object.assign(s.powerNote, d.powerNote || {});
@@ -86,7 +91,19 @@ function normalize(d){
   if (Array.isArray(d.drumSetup)) s.drumSetup = d.drumSetup;
   if (Array.isArray(d.stage)) s.stage = d.stage.map(it => Object.assign({ r:0, s:1, group:null }, it)); // Pflichtwerte setzen
   if (Array.isArray(d.contacts)) s.contacts = d.contacts;
-  return migrateInEar(s);                                  // ältere Stände: In-Ear-Zeilen -> Instrument
+  /* Migration v1 -> v2: Textzeilen «Funk/wired In-Ear» (+ folgende «XLR…»-Zeile) werden zur Eigenschaft inEar */
+  s.stage.forEach(it => {
+    if (it.type !== 'label' || it.inEar !== undefined || !Array.isArray(it.lines)) return;   // schon umgestellt / keine Karte
+    const i = it.lines.findIndex(t => /^(funk|wired)\s*in-?ear$/i.test(String(t).trim()));
+    if (i < 1) return;                                     // Zeile 0 = Titel bleibt immer
+    it.inEar = /^funk/i.test(String(it.lines[i]).trim()) ? 'funk' : 'wired';
+    const n = (it.lines[i + 1] && /^xlr/i.test(String(it.lines[i + 1]).trim())) ? 2 : 1;  // XLR-Zeile gehört dazu
+    it.lines.splice(i, n);                                 // Zeilen entfernen (werden automatisch gezeichnet)
+  });
+  /* Stände ohne Personen-Nr.: Standardnummern nach Karten-ID setzen (stiller Fallback, nur bekannte IDs) */
+  if (!s.stage.some(it => it.person > 0)) s.stage.forEach(it => { if (it.type === 'label' && DEFAULT_PERSON[it.id]) it.person = DEFAULT_PERSON[it.id]; });
+  s.version = DEFAULT_STATE.version;                       // Stand gilt ab jetzt als v2
+  return s;
 }
 
 /* ============================================================================
@@ -162,79 +179,105 @@ function renderChips(){
 function renderSelbar(){
   const it = getItem(selectedId);
   $('#selbar').hidden = !it;
-  if (it) $('#selName').textContent = itemName(it);
-  const ins = it && it.group && findInstr(state, it.group);   // In-Ear nur bei Elementen eines Instruments
-  $('#selIem').hidden = !ins;
-  $('#selIem').classList.toggle('on', !!(ins && ins.inEar && ins.inEar.type));
+  if (!it) return;
+  $('#selName').textContent = itemName(it);
+  const ml = musicianLabel(it), b = $('#selInEar');        // Karte des Musikers (bei Symbolen über das Instrument)
+  b.hidden = !ml;                                          // ohne zugehörige Karte kein In-Ear
+  if (ml) {
+    const ie = IN_EAR[ml.inEar];
+    b.textContent = '🎧 ' + (ie ? ie.name : 'aus');        // aktueller Zustand sichtbar
+    b.classList.toggle('on', !!ie);
+    b.title = 'In-Ear für «' + labelTitle(ml) + '» – antippen: aus → Funk → wired';
+  }
 }
+/* Karte des Musikers zu einem Element: die Karte selbst oder die erste Karte desselben Instruments */
+function musicianLabel(it){
+  if (!it) return null;
+  if (it.type === 'label') return it;
+  if (!it.group) return null;                              // allgemeines Element (z.B. Monitor ohne Instrument)
+  return state.stage.find(x => x.type === 'label' && x.group === it.group) || null;
+}
+/* Nächste freie Personen-Nr. */
+function nextPerson(){ return state.stage.reduce((m, x) => Math.max(m, x.person > 0 ? x.person : 0), 0) + 1; }
 
 /* ============================================================================
    PANEL: Element hinzufügen
    ========================================================================== */
 const ADD_TYPES = [
-  ['label','Beschriftung'], ['monitor','Monitor'], ['mic','Mikrofon'], ['amp','Verstärker'], ['power','Strom'],
-  ['di','DI-Box'], ['violin','Violine'], ['guitar','Gitarre'], ['accordion','Akkordeon'], ['drums','Schlagzeug']
+  ['monitor','Monitor'], ['mic','Mikrofon'], ['power','Strom'], ['amp','Verstärker'], ['di','DI-Box'],
+  ['label','Beschriftung'], ['violin','Violine'], ['guitar','Gitarre'], ['accordion','Akkordeon'], ['drums','Schlagzeug']
 ];
 function initAddPane(){
   const box = $('#addBtns');
-  ADD_TYPES.forEach(([type, name]) => box.append(h('button', { type:'button', onclick: () => addItem(type) }, name)));
+  ADD_TYPES.forEach(([type, name]) => box.append(h('button', { type:'button', onclick: () => addFromMenu(type, name) }, name)));
 }
-/* Neues Element in Bühnenmitte; wird gleich ausgewählt */
-function addItem(type, group, extra){
-  const it = Object.assign({ id:newId(type), type, x:STAGE_CENTER.x, y:STAGE_CENTER.y, r:0, s:1, group: group || null }, extra || {});
+/* Menü «＋ Hinzufügen» direkt über dem Bühnenplan */
+function initAddMenu(){
+  const menu = $('#addMenu'), btn = $('#bAdd');
+  const close = () => { menu.hidden = true; btn.classList.remove('on'); btn.setAttribute('aria-expanded', 'false'); };
+  ADD_TYPES.forEach(([type, name]) => menu.append(h('button', { type:'button', onclick: () => { close(); addFromMenu(type, name); } }, name)));
+  btn.addEventListener('click', () => {
+    addAt = null; menu.style.left = menu.style.top = menu.style.right = '';   // Knopf: Standardlage, Einfügen in Planmitte
+    const open = menu.hidden;                              // Zustand umschalten
+    menu.hidden = !open; btn.classList.toggle('on', open); btn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('pointerdown', e => { if (!menu.hidden && !e.target.closest('#addMenu, #bAdd')) close(); });  // Tippen daneben schliesst
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) close(); });
+}
+/* Einfügen aus Menü/Panel: in der sichtbaren Mitte des Plans, Element ist danach gewählt */
+let addAt = null;                                          // Einfügepunkt aus Tipp auf die Bühne (PE) oder null
+let menuOpenAtDown = false;                                // Menü war beim Drücken offen (Tipp schliesst nur)
+function addFromMenu(type, name){
+  if (addAt) {                                             // Auswahlstelle: Tipp-Punkt hat Vorrang
+    addItem(type, null, null, addAt); addAt = null;
+    toast(name + ' hier eingefügt.');
+    return;
+  }
+  addItem(type, null, null, freeSpot(viewCenter()));     // nicht genau auf ein bestehendes Element legen
+  toast(name + ' eingefügt – an den Platz ziehen.');
+}
+/* Menü an der Tipp-Stelle öffnen (Position relativ zu .a-stage in CSS-px) */
+function openAddMenuAt(evt){
+  const menu = $('#addMenu'), box = document.querySelector('.a-stage').getBoundingClientRect();
+  const p = toStage(evt);
+  addAt = { x: Math.min(690, Math.max(20, snap(p.x))), y: Math.min(765, Math.max(45, snap(p.y))) };   // im Bühnenrahmen halten (PE)
+  const w = Math.min(340, window.innerWidth - 24);         // Menübreite wie CSS
+  menu.style.left = Math.max(0, Math.min(evt.clientX - box.left - w / 2, box.width - w)) + 'px';
+  menu.style.right = 'auto';
+  menu.style.top = (evt.clientY - box.top + 12) + 'px';    // knapp unter dem Finger
+  menu.hidden = false; $('#bAdd').classList.add('on'); $('#bAdd').setAttribute('aria-expanded', 'true');
+}
+/* Mitte des sichtbaren Planausschnitts in PE (Ansicht «Bühne 2×» und Scrollen berücksichtigt) */
+function viewCenter(){
+  const root = document.getElementById('stageRoot'); if (!root) return STAGE_CENTER;
+  const r = $('#stageSheet').getBoundingClientRect();
+  const x0 = Math.max(r.left, 0), x1 = Math.min(r.right, window.innerWidth);       // sichtbarer Teil (Bildschirm-px)
+  const y0 = Math.max(r.top, 56), y1 = Math.min(r.bottom, window.innerHeight);     // 56 px = Kopfleiste
+  if (x1 - x0 < 40 || y1 - y0 < 40) return STAGE_CENTER;   // stiller Fallback: Plan nicht im Bild -> Bühnenmitte
+  const p = toStage({ clientX:(x0 + x1) / 2, clientY:(y0 + y1) / 2 });
+  return { x: Math.min(660, Math.max(50, snap(p.x))), y: Math.min(740, Math.max(70, snap(p.y))) };   // innerhalb des Bühnenrahmens halten
+}
+/* Freie Stelle nahe c: prüft Ringe im Abstand 50 PE, bis kein sichtbares Element näher als 45 PE liegt */
+function freeSpot(c){
+  const centers = state.stage.filter(it => isVisible(state, it)).map(it =>
+    it.type === 'label' ? { x: it.x + (it.w || 90) / 2, y: it.y + 23 } : { x: it.x, y: it.y });   // Karte: Mitte ungefähr (Breite, 2 Zeilen)
+  const free = p => p.x >= 50 && p.x <= 660 && p.y >= 70 && p.y <= 740 && centers.every(q => Math.hypot(q.x - p.x, q.y - p.y) >= 45);
+  for (let ring = 0; ring <= 3; ring++) {                  // 0 = Ausgangspunkt, dann 50/100/150 PE entfernt
+    const d = ring * 50;
+    const cand = ring ? [[0,-d],[d,0],[0,d],[-d,0],[d,-d],[d,d],[-d,d],[-d,-d]] : [[0,0]];
+    for (const [dx, dy] of cand) { const p = { x:c.x + dx, y:c.y + dy }; if (free(p)) return p; }
+  }
+  return c;                                                // stiller Fallback: alles belegt -> Ausgangspunkt
+}
+/* Neues Element (Standard: Bühnenmitte); wird gleich ausgewählt */
+function addItem(type, group, extra, at){
+  const c = at || STAGE_CENTER;                            // Einfügepunkt PE
+  const it = Object.assign({ id:newId(type), type, x:c.x, y:c.y, r:0, s:1, group: group || null }, extra || {});
   if (type === 'label') { it.lines = it.lines || ['Neu', 'Details']; it.w = it.w || 90; it.x -= 45; it.y -= 23; }  // Label: linke obere Ecke
   if (type === 'amp') { it.w = 60; it.h = 40; }
   if (type === 'violin') it.s = 0.8;
   mutate(() => { state.stage.push(it); selectedId = it.id; });
   return it;
-}
-
-/* ============================================================================
-   AUSWAHLFENSTER: Hier hinzufügen / In-Ear
-   ========================================================================== */
-function openPop(title, build){
-  const card = $('#popCard'); card.textContent = '';
-  card.append(h('div', { class:'pop-head' }, h('b', {}, title), h('button', { type:'button', class:'fix', 'aria-label':'schliessen', onclick: closePop }, '✕')));
-  build(card);                                             // Inhalt einsetzen
-  $('#pop').hidden = false;
-}
-function closePop(){ $('#pop').hidden = true; }
-/* Element an Punkt pt (Planeinheiten) einfügen; pt = null -> Bühnenmitte */
-function openAddPop(pt){
-  openPop(pt ? 'Hier hinzufügen' : 'Element hinzufügen (Bühnenmitte)', card => {
-    const grid = h('div', { class:'grid-btn' });
-    ADD_TYPES.forEach(([type, name]) => grid.append(h('button', { type:'button', onclick: () => {
-      closePop();
-      addItem(type, null, pt ? { x:snap(pt.x), y:snap(pt.y) } : null);   // Lage = Tipp-Punkt (gerastert)
-    } }, name)));
-    card.append(grid);
-  });
-}
-/* Vorgabe-Zusatzzeile beim Einschalten (Annahme analog bestehender Einträge) */
-function defaultIemNote(type, ins){
-  if (ins.inEar && ins.inEar.note) return ins.inEar.note;  // vorhandenen Zusatz behalten
-  return type === 'funk' ? 'XLR auf Bühne' : 'XLR';
-}
-/* Bedienelemente In-Ear (im Fenster und im Eigenschaften-Panel) */
-function buildInEarControls(box, ins, inPop){
-  const cur = (ins.inEar && ins.inEar.type) || '';
-  const seg = h('div', { class:'seg' });
-  [['', 'kein In-Ear'], ['funk', 'Funk In-Ear'], ['wired', 'wired In-Ear (Kabel)']].forEach(([v, l]) => seg.append(h('button', {
-    type:'button', class: cur === v ? 'on' : '',
-    onclick: () => {
-      mutate(() => { ins.inEar = v ? { type:v, note:defaultIemNote(v, ins) } : null; });   // Art setzen oder entfernen
-      if (inPop) openInEarPop(ins.id);                     // Fenster mit neuem Stand zeigen
-    } }, l)));
-  box.append(seg);
-  if (cur) box.append(h('label', { class:'f' }, 'Zusatzzeile im Plan (leer = keine)'), fieldText(() => ins.inEar.note || '', v => { ins.inEar.note = v; }));
-  if (!mainLabels(state)[ins.id]) box.append(h('p', { class:'muted' }, 'Hinweis: Dieses Instrument hat noch keine Beschriftung im Plan – die In-Ear-Angabe erscheint, sobald eine da ist.'));
-}
-function openInEarPop(insId){
-  const ins = findInstr(state, insId); if (!ins) return;
-  openPop('In-Ear – ' + ins.name, card => {
-    buildInEarControls(card, ins, true);
-    card.append(h('p', { class:'muted' }, 'Erscheint als Zeile in der Beschriftung des Instruments im Bühnenplan und im PDF.'));
-  });
 }
 
 /* ============================================================================
@@ -250,8 +293,20 @@ function renderSelPane(){
     h('option', { value:'' }, '– allgemein (immer sichtbar) –'),
     state.instruments.map(i => h('option', { value:i.id, selected: it.group === i.id }, i.name)));
   pane.append(h('label', { class:'f' }, 'Gehört zu Instrument'), sel);
-  const gIns = it.group && findInstr(state, it.group);
-  if (gIns) { pane.append(h('label', { class:'f' }, 'In-Ear – ' + gIns.name)); buildInEarControls(pane, gIns, false); }
+  /* In-Ear des Musikers (bei Symbolen: Karte desselben Instruments) */
+  const ml = musicianLabel(it);
+  if (ml) {
+    const ieSel = h('select', { onchange: e => mutate(() => { if (e.target.value) ml.inEar = e.target.value; else delete ml.inEar; }) },
+      h('option', { value:'', selected: !IN_EAR[ml.inEar] }, 'kein In-Ear'),
+      Object.entries(IN_EAR).map(([k, v]) => h('option', { value:k, selected: ml.inEar === k }, v.name + ' In-Ear  (' + v.lines.join(' / ') + ')')));
+    pane.append(h('label', { class:'f' }, 'In-Ear' + (ml !== it ? ' – Karte «' + labelTitle(ml) + '»' : '')), ieSel);
+  }
+  /* Personen-Nr. (gleiche Nr. = gleiche Person) */
+  if (it.type === 'label') {
+    const pn = bindEdit(h('input', { type:'text', inputMode:'numeric', placeholder:'leer = keine' }), () => it.person || '',
+      v => { const n = parseInt(v, 10); if (n > 0) it.person = n; else delete it.person; });   // ungültig/leer -> Nr. entfernen
+    pane.append(h('label', { class:'f' }, 'Personen-Nr. (gleiche Nr. = gleiche Person)'), pn);
+  }
   /* Typabhängige Felder */
   if (it.type === 'label') {
     pane.append(h('label', { class:'f' }, 'Text (1. Zeile fett, je Zeile eine Angabe)'),
@@ -292,6 +347,7 @@ function deleteItem(id){ mutate(() => { state.stage = state.stage.filter(x => x.
 function duplicateItem(id){
   const src = getItem(id); if (!src) return;
   const cp = Object.assign(clone(src), { id:newId(src.type), x:src.x + 20, y:src.y + 20 });   // 20 PE versetzt
+  if (cp.type === 'label' && cp.person > 0) cp.person = nextPerson();                       // Kopie = neue Person (Nr. im Panel änderbar)
   mutate(() => { state.stage.push(cp); selectedId = cp.id; });
 }
 
@@ -345,9 +401,6 @@ function renderInstrPane(){
       h('div', { class:'sub row' }, tbl,
         h('button', { type:'button', class:'fix', title:'nach oben', disabled: idx === 0, onclick: () => mutate(() => swap(state.instruments, idx, idx - 1)) }, '↑'),
         h('button', { type:'button', class:'fix', title:'nach unten', disabled: idx === state.instruments.length - 1, onclick: () => mutate(() => swap(state.instruments, idx, idx + 1)) }, '↓')),
-      h('div', { class:'sub row' }, h('span', { class:'muted fix' }, 'In-Ear'),
-        h('select', { onchange: e => mutate(() => { ins.inEar = e.target.value ? { type:e.target.value, note:defaultIemNote(e.target.value, ins) } : null; }) },
-          [['', 'kein'], ['funk', 'Funk In-Ear'], ['wired', 'wired In-Ear']].map(([v, l]) => h('option', { value:v, selected: ((ins.inEar && ins.inEar.type) || '') === v }, l)))),
       h('div', { class:'sub muted' }, n + ' Element(e) im Bühnenplan')));
   });
   pane.append(list, h('hr', { class:'sep' }));
@@ -367,7 +420,7 @@ function renderInstrPane(){
       const id = newId('ins');
       mutate(() => {
         state.instruments.push({ id, name, table: nTable.value.trim() || name, on:true });     // Instrument anlegen
-        const lab = { id:newId('label'), type:'label', x:STAGE_CENTER.x - 45, y:STAGE_CENTER.y + 30, r:0, s:1, group:id, w:90,
+        const lab = { id:newId('label'), type:'label', x:STAGE_CENTER.x - 45, y:STAGE_CENTER.y + 30, r:0, s:1, group:id, w:90, person:nextPerson(),
           lines: nDetail.value.trim() ? [name, nDetail.value.trim()] : [name] };
         if (nSym.value) state.stage.push({ id:newId(nSym.value), type:nSym.value, x:STAGE_CENTER.x, y:STAGE_CENTER.y, r:0, s: nSym.value === 'violin' ? 0.8 : 1, group:id,
           ...(nSym.value === 'amp' ? { w:60, h:40 } : {}) });                                    // optionales Symbol
@@ -401,7 +454,13 @@ function renderTextPane(){
   const pane = $('#textPane'); pane.textContent = '';
   const F = (lbl, path, area) => pane.append(h('label', { class:'f' }, lbl), fieldPath(path, area));
   F('Kopf: Kicker', 'meta.kicker'); F('Bandname', 'meta.band'); F('Untertitel', 'meta.subtitle');
-  F('Besetzung', 'meta.besetzung'); F('Stromnorm', 'meta.strom'); F('Stand', 'meta.stand');
+  const auto = state.meta.besetzungAuto !== false, ps = personSummary(state);
+  pane.append(h('label', { class:'row', style:'margin-top:10px' },
+    h('input', { type:'checkbox', class:'chk fix', checked:auto, onchange: e => mutate(() => { state.meta.besetzungAuto = e.target.checked; }) }),
+    h('span', {}, 'Besetzung automatisch aus den Personen-Nr. im Plan')));
+  if (auto && ps) pane.append(h('p', { class:'muted', style:'margin:4px 0 0' }, 'Besetzung: ' + ps.text));
+  else F('Besetzung (eigener Text)', 'meta.besetzung');     // von Hand oder keine Nr. vergeben
+  F('Stromnorm', 'meta.strom'); F('Stand', 'meta.stand');
   pane.append(h('hr', { class:'sep' }),
     h('label', { class:'row' }, h('input', { type:'checkbox', class:'chk fix', checked: state.hint.on, onchange: e => mutate(() => { state.hint.on = e.target.checked; }) }), h('b', {}, 'Hinweisbox unter dem Kopf (Seite 1)')));
   F('Hinweis: Titel', 'hint.title'); F('Hinweis: Text', 'hint.text', true);
@@ -424,9 +483,11 @@ function renderHelpPane(){
   const steps = [
     'Instrumente oben antippen = an/aus. Wirkt auf Bühnenplan und Instrumentenübersicht.',
     'Element im Bühnenplan antippen = auswählen, ziehen = verschieben. Leiste unten: drehen, Grösse, bearbeiten, duplizieren, löschen.',
+    'Neuer Monitor, Mikrofon, Strom usw.: «＋ Hinzufügen» über dem Plan → erscheint in der Mitte des sichtbaren Plans, dann an den Platz ziehen.',
+    'Oder direkt: leere Bühnenfläche antippen → Element wählen → es erscheint genau an dieser Stelle.',
+    'In-Ear: Musiker (Karte oder Symbol) antippen → 🎧 in der Leiste antippen: aus → Funk → wired.',
+    'Goldene Nummer = Person. Gleiche Nummer auf zwei Karten = eine Person mit zwei Instrumenten (Nummer unter «Ausgewähltes Element»). Besetzung und «N Personen» rechnen sich daraus.',
     'Handy: Ansicht «Bühne» oder «Bühne 2×» zum genauen Platzieren.',
-    'Hinzufügen: leere Bühnenfläche antippen → Element wählen (z.B. Monitor) – es erscheint genau dort. Oder «+ Monitor» / «+ Element» über dem Plan.',
-    'In-Ear: ein Element des Instruments antippen → 🎧 → «Funk» oder «wired» wählen. Die Angabe erscheint in der Beschriftung.',
     'Neues Instrument: «Instrumente verwalten» → «Instrument hinzufügen».',
     'Texte, Kontakte, Datum «Stand»: «Texte & Kontakte».',
     '«PDF» erzeugt den Rider (2 Seiten A4) zum Versenden an Veranstalter.'
@@ -542,11 +603,13 @@ function initStage(){
   svg.addEventListener('pointerup', end);
   svg.addEventListener('pointercancel', end);
   /* Klick auf leere Fläche: Auswahl aufheben */
+  svg.addEventListener('pointerdown', () => { menuOpenAtDown = !$('#addMenu').hidden; }, true);   // vor dem Schliessen durch Tipp daneben
   svg.addEventListener('click', e => {
     if (downOnItem) { downOnItem = false; return; }        // Klick gehört zu Auswahl/Ziehen eines Elements
     if (e.target.closest('.item')) return;
     if (selectedId) { selectedId = null; renderPages(); renderSelPane(); return; }   // 1. Tipp: nur Auswahl aufheben
-    if (e.target.classList && e.target.classList.contains('stage-floor')) openAddPop(toStage(e)); // 2. Tipp auf Boden: hier einfügen
+    if (menuOpenAtDown) return;                            // Tipp hat nur das offene Menü geschlossen
+    if (e.target.classList && e.target.classList.contains('stage-floor')) openAddMenuAt(e);   // leere Bühnenfläche: hier einfügen
   });
 }
 
@@ -561,7 +624,13 @@ function initSelbar(){
     if (act === 'smaller') mutate(() => { it.s = Math.max(0.2, +((it.s || 1) / 1.1).toFixed(3)); });   // −10 %
     if (act === 'bigger')  mutate(() => { it.s = Math.min(4, +((it.s || 1) * 1.1).toFixed(3)); });     // +10 %
     if (act === 'dup') duplicateItem(it.id);
-    if (act === 'iem' && it.group) openInEarPop(it.group);
+    if (act === 'inear') {                                 // In-Ear durchschalten: aus -> Funk -> wired -> aus
+      const ml = musicianLabel(it); if (!ml) return;
+      const order = ['', ...Object.keys(IN_EAR)];
+      const next = order[(order.indexOf(ml.inEar || '') + 1) % order.length];
+      mutate(() => { if (next) ml.inEar = next; else delete ml.inEar; });
+      toast('In-Ear «' + labelTitle(ml) + '»: ' + (next ? IN_EAR[next].lines.join(' / ') : 'keines'));
+    }
     if (act === 'edit') { const d = $('#secSel'); d.open = true; d.scrollIntoView({ behavior:'smooth', block:'start' }); }
     if (act === 'close') { selectedId = null; renderPages(); renderSelPane(); }
     if (act === 'del') {                                   // zweistufig löschen
@@ -578,7 +647,6 @@ function initKeys(){
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); return; }
-    if (e.key === 'Escape' && !$('#pop').hidden) { closePop(); return; }
     if (typing) return;
     const it = getItem(selectedId); if (!it) return;
     const step = e.shiftKey ? 10 : 1;                      // Pfeil = 1 PE, mit Umschalt 10 PE
@@ -701,7 +769,7 @@ async function loadState(){
     if (enc && enc.ct) { dataMode = 'enc'; d = await unlock(enc); }
   }
   if (d) { savedAt = d.savedAt || null; delete d.savedAt; state = normalize(d); }
-  else { dataMode = 'default'; state = normalize(null); }   // 3) stiller Fallback: eingebauter Standard (ohne Kontakte)
+  else { dataMode = 'default'; state = clone(DEFAULT_STATE); }   // 3) stiller Fallback: eingebauter Standard (ohne Kontakte)
   savedJSON = sj();
 }
 /* Sperrbildschirm: wartet, bis das Passwort die Datei entschlüsselt */
@@ -754,17 +822,11 @@ async function initCapabilities(){
 /* Ansichtswahl: Seite / Bühne / Bühne 2× */
 function applyView(){
   $('#stageSheet').classList.toggle('zoom2', viewMode === 'stage2');   // 2×: Blatt seitlich scrollbar
-  document.querySelectorAll('#viewbar button').forEach(b => b.classList.toggle('on', b.dataset.view === viewMode));
+  document.querySelectorAll('#viewbar button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === viewMode));
   renderPages();
 }
 function initView(){
-  $('#viewbar').addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.add === 'monitor') { addItem('monitor'); toast('Monitor in Bühnenmitte – an den Platz ziehen, mit ⟲ ⟳ ausrichten.'); return; }
-    if (b.dataset.add === 'menu') { openAddPop(null); return; }   // null = Bühnenmitte
-    viewMode = b.dataset.view; applyView();
-  });
-  $('#pop').addEventListener('click', e => { if (e.target.id === 'pop') closePop(); });   // Klick neben das Fenster schliesst
+  $('#viewbar').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (!b) return; viewMode = b.dataset.view; applyView(); });  // «＋ Hinzufügen» ausgenommen
 }
 
 async function boot(){
@@ -772,7 +834,7 @@ async function boot(){
     await Promise.all(['400 12px "RiderText"','700 12px "RiderText"','400 12px "RiderPlan"','700 12px "RiderPlan"'].map(f => document.fonts.load(f)));
   } catch (e) { /* stiller Fallback: Ersatzschrift, Textbreiten ggf. ungenau */ }
   await loadState();
-  initAddPane(); initStage(); initSelbar(); initKeys(); initView();
+  initAddPane(); initAddMenu(); initStage(); initSelbar(); initKeys(); initView();
   $('#bUndo').onclick = undo; $('#bRedo').onclick = redo;
   $('#bSave').onclick = onSave; $('#bPdf').onclick = exportPdf;
   if (dataMode === 'enc') { $('#bSave').textContent = 'Stand-Datei'; $('#bSave').title = 'Verschlüsselte Stand-Datei für GitHub erzeugen'; }

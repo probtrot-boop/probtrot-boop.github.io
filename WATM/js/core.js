@@ -12,6 +12,13 @@
    Annahmen:  Schriften "RiderText" (Carlito, Ersatz für Calibri) und
               "RiderPlan" (Lato) sind per @font-face geladen, bevor gezeichnet
               wird (Textbreiten werden per Canvas gemessen).
+   Personen:  Beschriftungen tragen eine Personen-Nr. (person). Gleiche Nr. =
+              gleiche Person (z.B. Vocal 1 + Akk. Gitarre). Daraus entstehen
+              automatisch: Nummern-Kreise im Plan, «= Vocal 1»-Zeile, Hinweis
+              «N Personen auf der Bühne» (Seite 2) und die Besetzung (Seite 1).
+   In-Ear:    pro Beschriftung (inEar: '' | 'funk' | 'wired'); die Textzeilen
+              «Funk In-Ear / XLR auf Bühne» bzw. «wired In-Ear / XLR» werden
+              automatisch angehängt (siehe IN_EAR).
    Umfang:    Keine Bedienlogik (die steckt in editor.js). Keine Personendaten
               (Kontakte nur als Platzhalter, siehe DEFAULT_STATE.contacts).
    ========================================================================== */
@@ -35,21 +42,20 @@ const STAGE_POS = { x:87.34, y:103, scale:619/710 };                     // Lage
    r = Drehung in Grad (Uhrzeigersinn), s = Massstab (1 = Originalgrösse).
    group = Instrument-ID; ist das Instrument aus, wird das Element ausgeblendet. */
 const DEFAULT_STATE = {
-  version: 1,
+  version: 2,                                              // 2 = Personen-Nr. + In-Ear als Eigenschaft
   meta: {
     kicker: 'LIVE · KONZERT · BÜHNENPLANUNG',
     band: 'WERLI AND THE MELODIES',
     subtitle: 'Technischer Rider',
-    besetzung: '10 Musiker:innen, 3 Lead-/Background-Vocals',
+    besetzung: '10 Personen (7 × Instrument, 2 × Gesang, 1 × Gesang + Gitarre)',   // nur bei besetzungAuto=false sichtbar
+    besetzungAuto: true,                                   // true = Besetzung aus Personen-Nr. im Plan berechnen
     strom: 'CH · Typ J · 230 V',
     stand: 'November 2026'
   },
   hint: { on:false, title:'Aktuelle Besetzung:', text:'Die Geige pausiert derzeit urlaubsbedingt und ist in diesem Rider nicht enthalten. Bühnenplan und Kanalliste werden entsprechend angepasst und bei Rückkehr der Geigerin/des Geigers wieder ergänzt.' },
-  /* table = Zeile in der Instrumentenübersicht; Anzahl = eingeschaltete Instrumente mit gleicher Zeile
-     inEar = { type:'funk'|'wired', note:'Zusatzzeile' } oder fehlt/null = kein In-Ear.
-     Die In-Ear-Zeilen erscheinen automatisch in der ersten Beschriftung des Instruments. */
+  /* table = Zeile in der Instrumentenübersicht; Anzahl = eingeschaltete Instrumente mit gleicher Zeile */
   instruments: [
-    { id:'drums',   name:'Schlagzeug',                  table:'Schlagzeug',     on:true, inEar:{ type:'wired', note:'XLR' } },
+    { id:'drums',   name:'Schlagzeug',                  table:'Schlagzeug',     on:true  },
     { id:'egit',    name:'E-Gitarre links (Kemper)',    table:'E-Gitarre',      on:true  },
     { id:'egit2',   name:'E-Gitarre rechts (Marshall)', table:'E-Gitarre',      on:false },
     { id:'akgit',   name:'Akustikgitarre (Engel)',      table:'Akustikgitarre', on:true  },
@@ -60,7 +66,7 @@ const DEFAULT_STATE = {
     { id:'whistle', name:'Whistle',                     table:'Whistle',        on:true  },
     { id:'voc1',    name:'Vocal 1',                     table:'Vocals',         on:true  },
     { id:'voc2',    name:'Vocal 2',                     table:'Vocals',         on:true  },
-    { id:'voc3',    name:'Vocal 3',                     table:'Vocals',         on:true, inEar:{ type:'funk', note:'XLR auf Bühne' } }
+    { id:'voc3',    name:'Vocal 3',                     table:'Vocals',         on:true  }
   ],
   drumSetup: [ ['Kick',1],['Tom Tom',1],['Stand Tom',2],['Snare',1],['Hi-Hat',1],['Ride',1],['Crash',2],['Splash',1],['Chimes',1] ],
   stage: [
@@ -84,18 +90,18 @@ const DEFAULT_STATE = {
     { id:'pw_ak',     type:'power',     x:666.75, y:336.75, r:0,     s:1,    group:'akgit' },
     { id:'pw_mando',  type:'power',     x:666.75, y:480.5,  r:0,     s:1,    group:'mando' },
     { id:'pw_br',     type:'power',     x:582.5,  y:730,    r:0,     s:1,    group:null },
-    { id:'lab_v3',    type:'label', x:176.5, y:167.5, r:0, s:1, group:'voc3',    w:98,    lines:['Vocal 3'] },
-    { id:'lab_v2',    type:'label', x:314,   y:168.5, r:0, s:1, group:'voc2',    w:88.5,  lines:['Vocal 2'] },
-    { id:'lab_v1',    type:'label', x:450.5, y:168.5, r:0, s:1, group:'voc1',    w:88.5,  lines:['Vocal 1'] },
-    { id:'lab_egit',  type:'label', x:100.5, y:253,   r:0, s:1, group:'egit',    w:139,   lines:['E-Gitarre','Kemper Verstärker','Line Signal'] },
-    { id:'lab_bass',  type:'label', x:143.5, y:332,   r:0, s:1, group:'bass',    w:93,    lines:['E-Bass','Amp'] },
-    { id:'lab_ak',    type:'label', x:552.5, y:196,   r:0, s:1, group:'akgit',   w:143.5, lines:['Akk. Gitarre','Engel Verstärker','Line Signal'] },
-    { id:'lab_egit2', type:'label', x:552.5, y:262,   r:0, s:1, group:'egit2',   w:143.5, lines:['E-Gitarre','Marshall Verstärker','Mikrofon'] },
-    { id:'lab_mando', type:'label', x:552.5, y:388.5, r:0, s:1, group:'mando',   w:143.5, lines:['Mandoline','Engel Verstärker','Line Signal'] },
-    { id:'lab_wh',    type:'label', x:399,   y:439,   r:0, s:1, group:'whistle', w:76,    lines:['Whistle','Mikrofon'] },
-    { id:'lab_akk',   type:'label', x:501.5, y:608,   r:0, s:1, group:'akk',     w:97,    lines:['Akkordeon','DI-Box'] },
-    { id:'lab_drums', type:'label', x:94.5,  y:689.5, r:0, s:1, group:'drums',   w:98,    lines:['Schlagzeug'] },
-    { id:'lab_vio',   type:'label', x:247,   y:466,   r:0, s:1, group:'violine', w:90,    lines:['Violine','DI-Box'] }
+    { id:'lab_v3',    type:'label', x:176.5, y:167.5, r:0, s:1, group:'voc3',    w:98,    person:3,  inEar:'funk',  lines:['Vocal 3'] },
+    { id:'lab_v2',    type:'label', x:314,   y:168.5, r:0, s:1, group:'voc2',    w:88.5,  person:2,  lines:['Vocal 2'] },
+    { id:'lab_v1',    type:'label', x:450.5, y:168.5, r:0, s:1, group:'voc1',    w:88.5,  person:1,  lines:['Vocal 1'] },
+    { id:'lab_egit',  type:'label', x:100.5, y:253,   r:0, s:1, group:'egit',    w:139,   person:4,  lines:['E-Gitarre','Kemper Verstärker','Line Signal'] },
+    { id:'lab_bass',  type:'label', x:143.5, y:332,   r:0, s:1, group:'bass',    w:93,    person:5,  lines:['E-Bass','Amp'] },
+    { id:'lab_ak',    type:'label', x:552.5, y:196,   r:0, s:1, group:'akgit',   w:143.5, person:1,  lines:['Akk. Gitarre','Engel Verstärker','Line Signal'] },
+    { id:'lab_egit2', type:'label', x:552.5, y:262,   r:0, s:1, group:'egit2',   w:143.5, person:1,  lines:['E-Gitarre','Marshall Verstärker','Mikrofon'] },
+    { id:'lab_mando', type:'label', x:552.5, y:388.5, r:0, s:1, group:'mando',   w:143.5, person:8,  lines:['Mandoline','Engel Verstärker','Line Signal'] },
+    { id:'lab_wh',    type:'label', x:399,   y:439,   r:0, s:1, group:'whistle', w:76,    person:7,  lines:['Whistle','Mikrofon'] },
+    { id:'lab_akk',   type:'label', x:501.5, y:608,   r:0, s:1, group:'akk',     w:97,    person:9,  lines:['Akkordeon','DI-Box'] },
+    { id:'lab_drums', type:'label', x:94.5,  y:689.5, r:0, s:1, group:'drums',   w:98,    person:10, inEar:'wired', lines:['Schlagzeug'] },
+    { id:'lab_vio',   type:'label', x:247,   y:466,   r:0, s:1, group:'violine', w:90,    person:6,  lines:['Violine','DI-Box'] }
   ],
   powerNote: { title:'Stromversorgung:', text:'Sämtliche elektrischen Geräte sind an Schweizer Stromanschlüsse (Typ J, 230 V) anzuschliessen. Pro markierter Position im Bühnenplan wird ein eigener, funktionierender Stromanschluss in Bühnennähe benötigt.' },
   /* Kontakte hier nur als Platzhalter: Code ist öffentlich; echte Angaben stehen
@@ -109,6 +115,17 @@ const DEFAULT_STATE = {
 /* Namen der Symboltypen (für Editor-Anzeige) */
 const TYPE_NAMES = { label:'Beschriftung', monitor:'Monitor', amp:'Verstärker', mic:'Mikrofon', power:'Stromanschluss',
   di:'DI-Box', violin:'Violine', accordion:'Akkordeon', drums:'Schlagzeug', guitar:'Gitarre' };
+
+/* In-Ear-Varianten: Name im Editor + automatisch angehängte Zeilen der Beschriftung
+   (Wortlaut aus dem bisherigen Rider: Vocal 3 = Funk, Schlagzeug = wired) */
+const IN_EAR = {
+  funk:  { name:'Funk',  lines:['Funk In-Ear', 'XLR auf Bühne'] },
+  wired: { name:'wired', lines:['wired In-Ear', 'XLR'] }
+};
+/* Standard-Personen-Nr. je Beschriftung (für ältere Stände ohne Nummern, siehe normalize) */
+const DEFAULT_PERSON = { lab_v1:1, lab_ak:1, lab_egit2:1, lab_v2:2, lab_v3:3, lab_egit:4, lab_bass:5, lab_vio:6, lab_wh:7, lab_mando:8, lab_akk:9, lab_drums:10 };
+/* Nummern-Kreis: Radius und Abstand zur rechten Kartenkante in PE (6.2 pt Radius wie Rider v3) */
+const BADGE = { r:9.5, inset:6 };
 
 /* ===== HILFSFUNKTIONEN ===== */
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -149,47 +166,67 @@ function findInstr(st, id){ return st.instruments.find(i => i.id === id); }
 function isVisible(st, it){ if (!it.group) return true; const i = findInstr(st, it.group); return !i || i.on; }
 /* Winkel auf (-180, 180] normieren */
 function normAngle(a){ a = ((a % 360) + 360) % 360; return a > 180 ? a - 360 : a; }
+/* Gesangs-Instrument? (Tabellenzeile «Vocals» oder Name «Vocal …»/«Gesang …») */
+function isVocal(ins){ return !!ins && (/^(vocal|gesang)/i.test(ins.table || '') || /^(vocal|gesang)/i.test(ins.name || '')); }
+/* Personen im Plan: Map Nr. -> sichtbare Beschriftungen (Hauptkarte zuerst: Gesang, sonst Planreihenfolge) */
+function personMap(st){
+  const m = new Map();
+  st.stage.forEach(it => {
+    if (it.type !== 'label' || !(it.person > 0) || !isVisible(st, it)) return;   // nur sichtbare Karten mit Nr.
+    if (!m.has(it.person)) m.set(it.person, []);
+    m.get(it.person).push(it);
+  });
+  m.forEach(list => list.sort((a, b) => (isVocal(findInstr(st, b.group)) ? 1 : 0) - (isVocal(findInstr(st, a.group)) ? 1 : 0)));  // Gesangskarte nach vorne (stabile Sortierung)
+  return m;
+}
+/* Titel einer Karte (1. Zeile) */
+function labelTitle(it){ return (it.lines && it.lines[0]) || 'Beschriftung'; }
+/* Besetzung aus Personen-Nr.: «10 Personen (7 × Instrument, 2 × Gesang, 1 × Gesang + Akustikgitarre)»
+   Rückgabe null, wenn keine Nummern vergeben (dann gilt der Text aus meta.besetzung) */
+function personSummary(st){
+  const m = personMap(st);
+  if (!m.size) return null;
+  let inst = 0, voc = 0; const combo = new Map();           // Zähler je Rolle
+  m.forEach(list => {
+    const ins = list.map(it => findInstr(st, it.group));
+    const hasVoc = ins.some(isVocal);
+    const other = [];                                      // Instrumente dieser Person ausser Gesang
+    list.forEach((it, i) => { if (!isVocal(ins[i])) other.push(ins[i] ? ins[i].table : labelTitle(it)); });  // ohne Instrument: Kartentitel
+    if (hasVoc && other.length) { const k = 'Gesang + ' + [...new Set(other)].join(' + '); combo.set(k, (combo.get(k) || 0) + 1); }
+    else if (hasVoc) voc++;
+    else inst++;
+  });
+  const parts = [];
+  if (inst) parts.push(inst + ' × Instrument');
+  if (voc) parts.push(voc + ' × Gesang');
+  combo.forEach((n, k) => parts.push(n + ' × ' + k));
+  return { count:m.size, text:(m.size === 1 ? '1 Person' : m.size + ' Personen') + ' (' + parts.join(', ') + ')', map:m };
+}
+/* Text der Besetzung im Kopf (automatisch oder von Hand) */
+function besetzungText(st){
+  const ps = st.meta.besetzungAuto !== false ? personSummary(st) : null;
+  return ps ? ps.text : st.meta.besetzung;                  // stiller Fallback: Handtext, wenn keine Nr. vergeben
+}
+/* Angezeigte Zeilen einer Karte: eigene Zeilen + In-Ear + «= Hauptkarte» (gleiche Person) */
+function labelLines(st, it){
+  const out = (it.lines && it.lines.length ? it.lines : ['Neu']).map((t, i) => ({ t, bold:i === 0, color: i ? C.slate : C.navy, size: i ? 12 : 14 }));
+  const ie = IN_EAR[it.inEar];
+  if (ie) ie.lines.forEach(t => out.push({ t, bold:false, color:C.slate, size:12 }));       // In-Ear-Zeilen
+  if (st && it.person > 0 && isVisible(st, it)) {
+    const list = personMap(st).get(it.person) || [];
+    if (list.length > 1 && list[0] !== it) out.push({ t:'= ' + labelTitle(list[0]), bold:true, color:C.orange, size:12 });  // Zweitkarte derselben Person
+  }
+  return out;
+}
+/* Nummern-Kreis (gold, weisser Rand, weisse Ziffer); Mitte cx/cy in lokalen PE */
+function drawBadge(g, cx, cy, num){
+  el('circle',{cx, cy, r:BADGE.r, fill:C.orange, stroke:'#FFFFFF', 'stroke-width':1.5}, g);
+  const fs = num < 10 ? 10.7 : 9.5;                         // 7 pt bzw. 6.2 pt wie Rider v3 (pt / 0.75 / 0.8718)
+  txt(g, cx, +(cy + fs * 0.36).toFixed(2), String(num), fs, true, '#FFFFFF', {'text-anchor':'middle'});  // Ziffernhöhe ≈ 0.72 × fs -> optisch zentriert
+}
 /* Transform eines Bühnenelements */
 function itemTransform(it){ return `translate(${+it.x.toFixed(2)} ${+it.y.toFixed(2)}) rotate(${it.r || 0}) scale(${it.s || 1})`; }
 let _uid = 0;                                               // Zähler für eindeutige Clip-IDs
-
-/* ===== IN-EAR ===== */
-const IEM_TEXT = { funk:'Funk In-Ear', wired:'wired In-Ear' };   // Text im Plan je Art
-/* Erste Beschriftung je Instrument = Träger der In-Ear-Zeilen (Map Instrument-ID -> Label-ID) */
-function mainLabels(st){
-  const m = {};
-  st.stage.forEach(it => { if (it.type === 'label' && it.group && !m[it.group]) m[it.group] = it.id; });
-  return m;
-}
-/* Zeilen einer Beschriftung inkl. automatisch ergänzter In-Ear-Angabe */
-function labelLines(st, it, mains){
-  const base = (it.lines && it.lines.length) ? it.lines.slice() : ['Neu'];
-  const ins = it.group && findInstr(st, it.group);
-  if (!ins || !ins.inEar || !IEM_TEXT[ins.inEar.type]) return base;
-  if ((mains || mainLabels(st))[it.group] !== it.id) return base;   // nur an der ersten Beschriftung
-  base.push(IEM_TEXT[ins.inEar.type]);
-  if (ins.inEar.note) base.push(ins.inEar.note);         // Zusatz (z.B. "XLR auf Bühne")
-  return base;
-}
-/* Umstellung älterer Stände: In-Ear-Zeilen aus Beschriftungen ins Instrument übernehmen.
-   Erkennung (Auswahlstelle): Zeile enthält "in-ear"/"inear"; "wired"/"kabel" = wired, sonst Funk;
-   folgt eine Zeile mit "XLR", wird sie zum Zusatz. Läuft nur für Instrumente ohne Feld inEar. */
-function migrateInEar(st){
-  const mains = mainLabels(st);
-  st.instruments.forEach(ins => {
-    if (ins.inEar !== undefined) return;                   // schon neues Format
-    ins.inEar = null;                                      // Standard: kein In-Ear
-    const lab = st.stage.find(x => x.id === mains[ins.id]);
-    if (!lab || !Array.isArray(lab.lines)) return;
-    const i = lab.lines.findIndex((s, k) => k > 0 && /in-?\s?ear/i.test(s));
-    if (i < 0) return;
-    const type = /wired|kabel/i.test(lab.lines[i]) ? 'wired' : 'funk';
-    const hasNote = /xlr/i.test(lab.lines[i + 1] || '');
-    ins.inEar = { type, note: hasNote ? lab.lines[i + 1] : '' };
-    lab.lines.splice(i, hasNote ? 2 : 1);                  // Zeilen aus der Beschriftung entfernen (werden automatisch angezeigt)
-  });
-  return st;
-}
 
 /* ============================================================================
    SYMBOLE – lokale Koordinaten in PE: Mitte = 0/0 (Label: linke obere Ecke)
@@ -266,15 +303,16 @@ const SHAPES = {
     txt(g, 0, 4, 'DI', 10.5, true, '#FFFFFF', {'text-anchor':'middle'});
   },
   /* Beschriftung: Karte mit dunklem Balken links; Zeile 1 fett, weitere normal */
-  label(g, it, linesOverride){
-    const lines = linesOverride || ((it.lines && it.lines.length) ? it.lines : ['Neu']);   // inkl. In-Ear-Zeilen aus drawStage
+  label(g, it, st){
+    const lines = labelLines(st, it);                      // eigene Zeilen + In-Ear + «= Hauptkarte»
     const h = 15 + 16 * lines.length;                      // 31 / 47 / 63 PE für 1 / 2 / 3 Zeilen
     let maxW = 0;
-    lines.forEach((s, i) => { maxW = Math.max(maxW, tw(s, i ? 12 : 14, i === 0, 'RiderPlan')); });
+    lines.forEach(l => { maxW = Math.max(maxW, tw(l.t, l.size, l.bold, 'RiderPlan')); });
     const w = Math.max(it.w || 90, Math.ceil(maxW + 24)); // stiller Fallback: Karte wächst mit dem Text (gespeicherte Breite bleibt)
     el('rect',{x:0, y:0, width:w, height:h, rx:1.5, fill:C.cream, stroke:C.tan, 'stroke-width':1.2}, g);
     el('rect',{x:0, y:0, width:4.5, height:h, fill:C.navy}, g);                                // Balken links
-    lines.forEach((s, i) => txt(g, 13, 19.5 + 16*i, s, i ? 12 : 14, i === 0, i ? C.slate : C.navy));
+    lines.forEach((l, i) => txt(g, 13, 19.5 + 16*i, l.t, l.size, l.bold, l.color));
+    if (it.person > 0) drawBadge(g, w - BADGE.inset, 0, it.person);                           // Personen-Nr. auf der oberen rechten Ecke
   }
 };
 
@@ -295,12 +333,10 @@ function drawStage(root, st, opts){
   el('rect',{x:7, y:34.5, width:695.5, height:740, rx:7, fill:'#FFFFFF', stroke:C.navy, 'stroke-width':2.2, class:'stage-floor'}, root);
   /* Elemente in Reihenfolge (unten -> oben) */
   const layer = el('g',{class:'items'}, root);
-  const mains = mainLabels(st);                            // Träger der In-Ear-Zeilen
   st.stage.forEach(it => {
     if (!isVisible(st, it)) return;                        // abgewählte Instrumente überspringen
     const g = el('g',{class:'item', 'data-id':it.id, transform:itemTransform(it)}, layer);
-    if (it.type === 'label' || !SHAPES[it.type]) SHAPES.label(g, it, labelLines(st, it, mains)); // unbekannter Typ -> als Beschriftung
-    else SHAPES[it.type](g, it);
+    (SHAPES[it.type] || SHAPES.label)(g, it, st);          // unbekannter Typ -> als Beschriftung zeichnen; st für Personen/In-Ear
     if (opts.interactive) addHitArea(g);                   // grössere Trefferfläche für Finger
     if (opts.interactive && it.id === opts.selectedId) markSelected(g);
   });
@@ -311,6 +347,14 @@ function drawStage(root, st, opts){
   txt(root, 403, 800, 'Monitor', 12, false, C.slate);
   el('rect',{x:473, y:788.5, width:24, height:15, rx:2, fill:C.amp, stroke:C.slate, 'stroke-width':1}, root);
   txt(root, 505, 800, 'Verstärker', 12, false, C.slate);
+  /* Legende Personen-Nr. (nur wenn Nummern vergeben) */
+  const ps = personSummary(st);
+  if (ps) {
+    const bx = 505 + tw('Verstärker', 12, false, 'RiderPlan') + 28 + BADGE.r;   // 28 PE Abstand wie zwischen den übrigen Einträgen
+    drawBadge(root, +bx.toFixed(2), 796, 1);
+    const maxNr = Math.max(...ps.map.keys());
+    txt(root, +(bx + BADGE.r + 8).toFixed(2), 800, 'Person 1–' + maxNr, 12, false, C.slate);
+  }
 }
 /* Unsichtbare Trefferfläche (nur Bildschirm), damit dünne Symbole gut greifbar sind */
 function addHitArea(g){
@@ -389,7 +433,7 @@ function renderPage1(svg, st){
   txt(root, 78, 115.5, st.meta.band, 30.7, true, '#FFFFFF');
   txt(root, 78, 136.5, st.meta.subtitle, 13.6, false, C.grey);
   let x = 78;                                              // Laufposition Metazeile
-  [['Besetzung', st.meta.besetzung], ['Stromnorm', st.meta.strom], ['Stand', st.meta.stand]].forEach(([k, v]) => {
+  [['Besetzung', besetzungText(st)], ['Stromnorm', st.meta.strom], ['Stand', st.meta.stand]].forEach(([k, v]) => {   // Besetzung ggf. automatisch
     txt(root, +x.toFixed(2), 160, k, 10.8, true, '#FFFFFF'); x += tw(k, 10.8, true) + 3;      // Bezeichnung + 3 px
     txt(root, +x.toFixed(2), 160, v, 10.8, false, C.grey);   x += tw(v, 10.8, false) + 14;    // Wert + 14 px Lücke
   });
@@ -410,6 +454,20 @@ function renderPage2(svg, st, opts){
   const root = el('g',{'font-family':'RiderText'}, svg);
   el('rect',{x:0, y:0, width:PAGE.w, height:PAGE.h, fill:'#FFFFFF'}, root);
   drawSection(root, 60, '02', 'BÜHNENPLAN');
+  /* Hinweis rechts: «N Personen auf der Bühne · Vocal 1 spielt zugleich Akk. Gitarre» */
+  const ps = personSummary(st);
+  if (ps) {
+    const a = (ps.count === 1 ? '1 Person' : ps.count + ' Personen') + ' auf der Bühne';
+    let b = '';
+    ps.map.forEach(list => { if (list.length > 1) b += (b ? ' · ' : '· ') + labelTitle(list[0]) + ' spielt zugleich ' + list.slice(1).map(labelTitle).join(' + '); });
+    const fs = 12;                                         // 9 pt
+    const gap = b ? tw(' ', fs, false) : 0;                // Leerzeichen als Versatz (führende Leerzeichen fallen in SVG weg)
+    if (tw(a, fs, true) + gap + tw(b, fs, false) > PAGE.right - 260) b = '';   // stiller Fallback: zu lang -> nur Personenzahl
+    const wb = b ? gap + tw(b, fs, false) : 0;             // Breite normaler Teil inkl. Abstand
+    const x0 = PAGE.right - tw(a, fs, true) - wb;           // rechtsbündig
+    txt(root, +x0.toFixed(2), 76, a, fs, true, C.orange);
+    if (b) txt(root, +(x0 + tw(a, fs, true) + gap).toFixed(2), 76, b, fs, false, C.slate);
+  }
   const stage = el('g',{id: opts && opts.interactive ? 'stageRoot' : null, 'font-family':'RiderPlan',
     transform:`translate(${STAGE_POS.x} ${STAGE_POS.y}) scale(${STAGE_POS.scale})`}, root);
   drawStage(stage, st, opts);
