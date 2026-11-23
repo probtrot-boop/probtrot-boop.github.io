@@ -78,7 +78,9 @@ label.f{display:block;font-size:12px;color:var(--slate);margin:8px 0 3px}
 .chip.off{background:#fff;color:#8a8f95;border-color:#c9c4b8;text-decoration:line-through}
 
 /* ===== ANSICHTSWAHL Bühnenplan ===== */
-.viewbar{display:flex;gap:6px;align-items:center;margin:0 0 8px}
+.viewbar{display:flex;gap:6px;align-items:center;margin:0 0 8px;flex-wrap:wrap}
+.viewbar .sp{flex:1}
+.viewbar button.add{border-color:var(--orange);color:#8a5a14;font-weight:700}
 .viewbar button{min-height:32px;padding:5px 10px;font-size:13px}
 .viewbar button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 #stageSheet.zoom2{overflow:auto;-webkit-overflow-scrolling:touch;max-height:80vh}
@@ -120,6 +122,19 @@ hr.sep{border:0;border-top:1px solid #eee5d3;margin:12px 0}
 .selbar button.danger.armed{background:var(--bad);color:#fff}
 @media (max-width:430px){.selbar .nm{display:none}}   /* schmale Handys: nur Knöpfe */
 
+.selbar button.on{background:var(--orange);border-color:var(--orange)}   /* In-Ear aktiv */
+.selbar button[hidden]{display:none}
+
+/* ===== AUSWAHLFENSTER (unten auf Handy, mittig auf Desktop) ===== */
+.pop{position:fixed;inset:0;z-index:50;background:rgba(20,32,43,.35);display:flex;align-items:flex-end;justify-content:center}
+.pop[hidden]{display:none}
+.pop-card{background:#fff;width:100%;max-width:440px;border-radius:16px 16px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -4px 20px rgba(0,0,0,.2);max-height:80vh;overflow:auto}
+@media (min-width:700px){.pop{align-items:center}.pop-card{border-radius:14px}}
+.pop-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;font-size:15px}
+.seg{display:flex;flex-direction:column;gap:6px}
+.seg button{text-align:left}
+.seg button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+
 /* ===== MELDUNG (Toast) ===== */
 .toast{position:fixed;left:50%;transform:translateX(-50%);top:70px;z-index:40;background:#222;color:#fff;padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
 .toast.show{opacity:.95}
@@ -138,7 +153,7 @@ body.locked .bar .actions,body.locked .layout,body.locked .banner{display:none !
 @page{size:A4;margin:0}
 @media print{
   body{background:#fff}
-  .bar,.banner,.a-chips,.a-side,.selbar,.toast,.caption,.viewbar{display:none !important}
+  .bar,.banner,.a-chips,.a-side,.selbar,.toast,.caption,.viewbar,.pop{display:none !important}
   .layout{display:flex;flex-direction:column;padding:0;max-width:none;gap:0}
   .sheet{box-shadow:none;border-radius:0;width:210mm;height:297mm;break-after:page}
   .a-p1{order:-1}
@@ -185,9 +200,12 @@ body.locked .bar .actions,body.locked .layout,body.locked .banner{display:none !
       <button type="button" data-view="page">Seite</button>
       <button type="button" data-view="stage">Bühne</button>
       <button type="button" data-view="stage2">Bühne 2×</button>
+      <span class="sp"></span>
+      <button type="button" class="add" data-add="monitor">+ Monitor</button>
+      <button type="button" class="add" data-add="menu">+ Element</button>
     </div>
     <div class="sheet" id="stageSheet"><svg id="page2" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Seite 2 Bühnenplan"></svg></div>
-    <p class="caption">Antippen = auswählen · Ziehen = verschieben · leere Fläche = Auswahl aufheben</p>
+    <p class="caption">Element antippen = auswählen · ziehen = verschieben · leere Bühnenfläche antippen = dort hinzufügen · 🎧 = In-Ear des Instruments</p>
   </section>
 
   <!-- Seitenpanel -->
@@ -218,12 +236,15 @@ body.locked .bar .actions,body.locked .layout,body.locked .banner{display:none !
   <button data-act="rotR" title="15° rechts drehen">⟳</button>
   <button data-act="smaller" title="kleiner">−</button>
   <button data-act="bigger" title="grösser">+</button>
+  <button data-act="iem" id="selIem" title="In-Ear für dieses Instrument">🎧</button>
   <button data-act="edit" title="Eigenschaften bearbeiten">✎</button>
   <button data-act="dup" title="duplizieren">⧉</button>
   <button data-act="del" class="danger" title="löschen">🗑</button>
   <button data-act="close" title="Auswahl aufheben">✕</button>
 </div>
 <div id="toast" class="toast"></div>
+<!-- Auswahlfenster (Hier hinzufügen / In-Ear) -->
+<div id="pop" class="pop" hidden><div class="pop-card" id="popCard" role="dialog" aria-modal="true"></div></div>
 
 <script src="js/core.js"></script>
 <script src="js/crypto.js"></script>

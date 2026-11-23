@@ -78,7 +78,7 @@ function armButton(btn, armedText, action){
 /* ===== STAND PRÜFEN: fehlende Felder aus dem Standard ergänzen ===== */
 function normalize(d){
   const s = clone(DEFAULT_STATE);
-  if (!d || typeof d !== 'object') return s;               // stiller Fallback: Standardstand
+  if (!d || typeof d !== 'object') return migrateInEar(s); // stiller Fallback: Standardstand
   s.meta = Object.assign(s.meta, d.meta || {});
   s.hint = Object.assign(s.hint, d.hint || {});
   s.powerNote = Object.assign(s.powerNote, d.powerNote || {});
@@ -86,7 +86,7 @@ function normalize(d){
   if (Array.isArray(d.drumSetup)) s.drumSetup = d.drumSetup;
   if (Array.isArray(d.stage)) s.stage = d.stage.map(it => Object.assign({ r:0, s:1, group:null }, it)); // Pflichtwerte setzen
   if (Array.isArray(d.contacts)) s.contacts = d.contacts;
-  return s;
+  return migrateInEar(s);                                  // ältere Stände: In-Ear-Zeilen -> Instrument
 }
 
 /* ============================================================================
@@ -163,6 +163,9 @@ function renderSelbar(){
   const it = getItem(selectedId);
   $('#selbar').hidden = !it;
   if (it) $('#selName').textContent = itemName(it);
+  const ins = it && it.group && findInstr(state, it.group);   // In-Ear nur bei Elementen eines Instruments
+  $('#selIem').hidden = !ins;
+  $('#selIem').classList.toggle('on', !!(ins && ins.inEar && ins.inEar.type));
 }
 
 /* ============================================================================
@@ -187,6 +190,54 @@ function addItem(type, group, extra){
 }
 
 /* ============================================================================
+   AUSWAHLFENSTER: Hier hinzufügen / In-Ear
+   ========================================================================== */
+function openPop(title, build){
+  const card = $('#popCard'); card.textContent = '';
+  card.append(h('div', { class:'pop-head' }, h('b', {}, title), h('button', { type:'button', class:'fix', 'aria-label':'schliessen', onclick: closePop }, '✕')));
+  build(card);                                             // Inhalt einsetzen
+  $('#pop').hidden = false;
+}
+function closePop(){ $('#pop').hidden = true; }
+/* Element an Punkt pt (Planeinheiten) einfügen; pt = null -> Bühnenmitte */
+function openAddPop(pt){
+  openPop(pt ? 'Hier hinzufügen' : 'Element hinzufügen (Bühnenmitte)', card => {
+    const grid = h('div', { class:'grid-btn' });
+    ADD_TYPES.forEach(([type, name]) => grid.append(h('button', { type:'button', onclick: () => {
+      closePop();
+      addItem(type, null, pt ? { x:snap(pt.x), y:snap(pt.y) } : null);   // Lage = Tipp-Punkt (gerastert)
+    } }, name)));
+    card.append(grid);
+  });
+}
+/* Vorgabe-Zusatzzeile beim Einschalten (Annahme analog bestehender Einträge) */
+function defaultIemNote(type, ins){
+  if (ins.inEar && ins.inEar.note) return ins.inEar.note;  // vorhandenen Zusatz behalten
+  return type === 'funk' ? 'XLR auf Bühne' : 'XLR';
+}
+/* Bedienelemente In-Ear (im Fenster und im Eigenschaften-Panel) */
+function buildInEarControls(box, ins, inPop){
+  const cur = (ins.inEar && ins.inEar.type) || '';
+  const seg = h('div', { class:'seg' });
+  [['', 'kein In-Ear'], ['funk', 'Funk In-Ear'], ['wired', 'wired In-Ear (Kabel)']].forEach(([v, l]) => seg.append(h('button', {
+    type:'button', class: cur === v ? 'on' : '',
+    onclick: () => {
+      mutate(() => { ins.inEar = v ? { type:v, note:defaultIemNote(v, ins) } : null; });   // Art setzen oder entfernen
+      if (inPop) openInEarPop(ins.id);                     // Fenster mit neuem Stand zeigen
+    } }, l)));
+  box.append(seg);
+  if (cur) box.append(h('label', { class:'f' }, 'Zusatzzeile im Plan (leer = keine)'), fieldText(() => ins.inEar.note || '', v => { ins.inEar.note = v; }));
+  if (!mainLabels(state)[ins.id]) box.append(h('p', { class:'muted' }, 'Hinweis: Dieses Instrument hat noch keine Beschriftung im Plan – die In-Ear-Angabe erscheint, sobald eine da ist.'));
+}
+function openInEarPop(insId){
+  const ins = findInstr(state, insId); if (!ins) return;
+  openPop('In-Ear – ' + ins.name, card => {
+    buildInEarControls(card, ins, true);
+    card.append(h('p', { class:'muted' }, 'Erscheint als Zeile in der Beschriftung des Instruments im Bühnenplan und im PDF.'));
+  });
+}
+
+/* ============================================================================
    PANEL: Ausgewähltes Element
    ========================================================================== */
 function renderSelPane(){
@@ -199,6 +250,8 @@ function renderSelPane(){
     h('option', { value:'' }, '– allgemein (immer sichtbar) –'),
     state.instruments.map(i => h('option', { value:i.id, selected: it.group === i.id }, i.name)));
   pane.append(h('label', { class:'f' }, 'Gehört zu Instrument'), sel);
+  const gIns = it.group && findInstr(state, it.group);
+  if (gIns) { pane.append(h('label', { class:'f' }, 'In-Ear – ' + gIns.name)); buildInEarControls(pane, gIns, false); }
   /* Typabhängige Felder */
   if (it.type === 'label') {
     pane.append(h('label', { class:'f' }, 'Text (1. Zeile fett, je Zeile eine Angabe)'),
@@ -292,6 +345,9 @@ function renderInstrPane(){
       h('div', { class:'sub row' }, tbl,
         h('button', { type:'button', class:'fix', title:'nach oben', disabled: idx === 0, onclick: () => mutate(() => swap(state.instruments, idx, idx - 1)) }, '↑'),
         h('button', { type:'button', class:'fix', title:'nach unten', disabled: idx === state.instruments.length - 1, onclick: () => mutate(() => swap(state.instruments, idx, idx + 1)) }, '↓')),
+      h('div', { class:'sub row' }, h('span', { class:'muted fix' }, 'In-Ear'),
+        h('select', { onchange: e => mutate(() => { ins.inEar = e.target.value ? { type:e.target.value, note:defaultIemNote(e.target.value, ins) } : null; }) },
+          [['', 'kein'], ['funk', 'Funk In-Ear'], ['wired', 'wired In-Ear']].map(([v, l]) => h('option', { value:v, selected: ((ins.inEar && ins.inEar.type) || '') === v }, l)))),
       h('div', { class:'sub muted' }, n + ' Element(e) im Bühnenplan')));
   });
   pane.append(list, h('hr', { class:'sep' }));
@@ -369,6 +425,8 @@ function renderHelpPane(){
     'Instrumente oben antippen = an/aus. Wirkt auf Bühnenplan und Instrumentenübersicht.',
     'Element im Bühnenplan antippen = auswählen, ziehen = verschieben. Leiste unten: drehen, Grösse, bearbeiten, duplizieren, löschen.',
     'Handy: Ansicht «Bühne» oder «Bühne 2×» zum genauen Platzieren.',
+    'Hinzufügen: leere Bühnenfläche antippen → Element wählen (z.B. Monitor) – es erscheint genau dort. Oder «+ Monitor» / «+ Element» über dem Plan.',
+    'In-Ear: ein Element des Instruments antippen → 🎧 → «Funk» oder «wired» wählen. Die Angabe erscheint in der Beschriftung.',
     'Neues Instrument: «Instrumente verwalten» → «Instrument hinzufügen».',
     'Texte, Kontakte, Datum «Stand»: «Texte & Kontakte».',
     '«PDF» erzeugt den Rider (2 Seiten A4) zum Versenden an Veranstalter.'
@@ -486,7 +544,9 @@ function initStage(){
   /* Klick auf leere Fläche: Auswahl aufheben */
   svg.addEventListener('click', e => {
     if (downOnItem) { downOnItem = false; return; }        // Klick gehört zu Auswahl/Ziehen eines Elements
-    if (!e.target.closest('.item') && selectedId) { selectedId = null; renderPages(); renderSelPane(); }
+    if (e.target.closest('.item')) return;
+    if (selectedId) { selectedId = null; renderPages(); renderSelPane(); return; }   // 1. Tipp: nur Auswahl aufheben
+    if (e.target.classList && e.target.classList.contains('stage-floor')) openAddPop(toStage(e)); // 2. Tipp auf Boden: hier einfügen
   });
 }
 
@@ -501,6 +561,7 @@ function initSelbar(){
     if (act === 'smaller') mutate(() => { it.s = Math.max(0.2, +((it.s || 1) / 1.1).toFixed(3)); });   // −10 %
     if (act === 'bigger')  mutate(() => { it.s = Math.min(4, +((it.s || 1) * 1.1).toFixed(3)); });     // +10 %
     if (act === 'dup') duplicateItem(it.id);
+    if (act === 'iem' && it.group) openInEarPop(it.group);
     if (act === 'edit') { const d = $('#secSel'); d.open = true; d.scrollIntoView({ behavior:'smooth', block:'start' }); }
     if (act === 'close') { selectedId = null; renderPages(); renderSelPane(); }
     if (act === 'del') {                                   // zweistufig löschen
@@ -517,6 +578,7 @@ function initKeys(){
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); redo(); return; }
+    if (e.key === 'Escape' && !$('#pop').hidden) { closePop(); return; }
     if (typing) return;
     const it = getItem(selectedId); if (!it) return;
     const step = e.shiftKey ? 10 : 1;                      // Pfeil = 1 PE, mit Umschalt 10 PE
@@ -639,7 +701,7 @@ async function loadState(){
     if (enc && enc.ct) { dataMode = 'enc'; d = await unlock(enc); }
   }
   if (d) { savedAt = d.savedAt || null; delete d.savedAt; state = normalize(d); }
-  else { dataMode = 'default'; state = clone(DEFAULT_STATE); }   // 3) stiller Fallback: eingebauter Standard (ohne Kontakte)
+  else { dataMode = 'default'; state = normalize(null); }   // 3) stiller Fallback: eingebauter Standard (ohne Kontakte)
   savedJSON = sj();
 }
 /* Sperrbildschirm: wartet, bis das Passwort die Datei entschlüsselt */
@@ -696,7 +758,13 @@ function applyView(){
   renderPages();
 }
 function initView(){
-  $('#viewbar').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; viewMode = b.dataset.view; applyView(); });
+  $('#viewbar').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.add === 'monitor') { addItem('monitor'); toast('Monitor in Bühnenmitte – an den Platz ziehen, mit ⟲ ⟳ ausrichten.'); return; }
+    if (b.dataset.add === 'menu') { openAddPop(null); return; }   // null = Bühnenmitte
+    viewMode = b.dataset.view; applyView();
+  });
+  $('#pop').addEventListener('click', e => { if (e.target.id === 'pop') closePop(); });   // Klick neben das Fenster schliesst
 }
 
 async function boot(){

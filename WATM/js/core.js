@@ -45,9 +45,11 @@ const DEFAULT_STATE = {
     stand: 'November 2026'
   },
   hint: { on:false, title:'Aktuelle Besetzung:', text:'Die Geige pausiert derzeit urlaubsbedingt und ist in diesem Rider nicht enthalten. Bühnenplan und Kanalliste werden entsprechend angepasst und bei Rückkehr der Geigerin/des Geigers wieder ergänzt.' },
-  /* table = Zeile in der Instrumentenübersicht; Anzahl = eingeschaltete Instrumente mit gleicher Zeile */
+  /* table = Zeile in der Instrumentenübersicht; Anzahl = eingeschaltete Instrumente mit gleicher Zeile
+     inEar = { type:'funk'|'wired', note:'Zusatzzeile' } oder fehlt/null = kein In-Ear.
+     Die In-Ear-Zeilen erscheinen automatisch in der ersten Beschriftung des Instruments. */
   instruments: [
-    { id:'drums',   name:'Schlagzeug',                  table:'Schlagzeug',     on:true  },
+    { id:'drums',   name:'Schlagzeug',                  table:'Schlagzeug',     on:true, inEar:{ type:'wired', note:'XLR' } },
     { id:'egit',    name:'E-Gitarre links (Kemper)',    table:'E-Gitarre',      on:true  },
     { id:'egit2',   name:'E-Gitarre rechts (Marshall)', table:'E-Gitarre',      on:false },
     { id:'akgit',   name:'Akustikgitarre (Engel)',      table:'Akustikgitarre', on:true  },
@@ -58,7 +60,7 @@ const DEFAULT_STATE = {
     { id:'whistle', name:'Whistle',                     table:'Whistle',        on:true  },
     { id:'voc1',    name:'Vocal 1',                     table:'Vocals',         on:true  },
     { id:'voc2',    name:'Vocal 2',                     table:'Vocals',         on:true  },
-    { id:'voc3',    name:'Vocal 3',                     table:'Vocals',         on:true  }
+    { id:'voc3',    name:'Vocal 3',                     table:'Vocals',         on:true, inEar:{ type:'funk', note:'XLR auf Bühne' } }
   ],
   drumSetup: [ ['Kick',1],['Tom Tom',1],['Stand Tom',2],['Snare',1],['Hi-Hat',1],['Ride',1],['Crash',2],['Splash',1],['Chimes',1] ],
   stage: [
@@ -82,7 +84,7 @@ const DEFAULT_STATE = {
     { id:'pw_ak',     type:'power',     x:666.75, y:336.75, r:0,     s:1,    group:'akgit' },
     { id:'pw_mando',  type:'power',     x:666.75, y:480.5,  r:0,     s:1,    group:'mando' },
     { id:'pw_br',     type:'power',     x:582.5,  y:730,    r:0,     s:1,    group:null },
-    { id:'lab_v3',    type:'label', x:176.5, y:167.5, r:0, s:1, group:'voc3',    w:98,    lines:['Vocal 3','Funk In-Ear','XLR auf Bühne'] },
+    { id:'lab_v3',    type:'label', x:176.5, y:167.5, r:0, s:1, group:'voc3',    w:98,    lines:['Vocal 3'] },
     { id:'lab_v2',    type:'label', x:314,   y:168.5, r:0, s:1, group:'voc2',    w:88.5,  lines:['Vocal 2'] },
     { id:'lab_v1',    type:'label', x:450.5, y:168.5, r:0, s:1, group:'voc1',    w:88.5,  lines:['Vocal 1'] },
     { id:'lab_egit',  type:'label', x:100.5, y:253,   r:0, s:1, group:'egit',    w:139,   lines:['E-Gitarre','Kemper Verstärker','Line Signal'] },
@@ -92,7 +94,7 @@ const DEFAULT_STATE = {
     { id:'lab_mando', type:'label', x:552.5, y:388.5, r:0, s:1, group:'mando',   w:143.5, lines:['Mandoline','Engel Verstärker','Line Signal'] },
     { id:'lab_wh',    type:'label', x:399,   y:439,   r:0, s:1, group:'whistle', w:76,    lines:['Whistle','Mikrofon'] },
     { id:'lab_akk',   type:'label', x:501.5, y:608,   r:0, s:1, group:'akk',     w:97,    lines:['Akkordeon','DI-Box'] },
-    { id:'lab_drums', type:'label', x:94.5,  y:689.5, r:0, s:1, group:'drums',   w:98,    lines:['Schlagzeug','wired In-Ear','XLR'] },
+    { id:'lab_drums', type:'label', x:94.5,  y:689.5, r:0, s:1, group:'drums',   w:98,    lines:['Schlagzeug'] },
     { id:'lab_vio',   type:'label', x:247,   y:466,   r:0, s:1, group:'violine', w:90,    lines:['Violine','DI-Box'] }
   ],
   powerNote: { title:'Stromversorgung:', text:'Sämtliche elektrischen Geräte sind an Schweizer Stromanschlüsse (Typ J, 230 V) anzuschliessen. Pro markierter Position im Bühnenplan wird ein eigener, funktionierender Stromanschluss in Bühnennähe benötigt.' },
@@ -150,6 +152,44 @@ function normAngle(a){ a = ((a % 360) + 360) % 360; return a > 180 ? a - 360 : a
 /* Transform eines Bühnenelements */
 function itemTransform(it){ return `translate(${+it.x.toFixed(2)} ${+it.y.toFixed(2)}) rotate(${it.r || 0}) scale(${it.s || 1})`; }
 let _uid = 0;                                               // Zähler für eindeutige Clip-IDs
+
+/* ===== IN-EAR ===== */
+const IEM_TEXT = { funk:'Funk In-Ear', wired:'wired In-Ear' };   // Text im Plan je Art
+/* Erste Beschriftung je Instrument = Träger der In-Ear-Zeilen (Map Instrument-ID -> Label-ID) */
+function mainLabels(st){
+  const m = {};
+  st.stage.forEach(it => { if (it.type === 'label' && it.group && !m[it.group]) m[it.group] = it.id; });
+  return m;
+}
+/* Zeilen einer Beschriftung inkl. automatisch ergänzter In-Ear-Angabe */
+function labelLines(st, it, mains){
+  const base = (it.lines && it.lines.length) ? it.lines.slice() : ['Neu'];
+  const ins = it.group && findInstr(st, it.group);
+  if (!ins || !ins.inEar || !IEM_TEXT[ins.inEar.type]) return base;
+  if ((mains || mainLabels(st))[it.group] !== it.id) return base;   // nur an der ersten Beschriftung
+  base.push(IEM_TEXT[ins.inEar.type]);
+  if (ins.inEar.note) base.push(ins.inEar.note);         // Zusatz (z.B. "XLR auf Bühne")
+  return base;
+}
+/* Umstellung älterer Stände: In-Ear-Zeilen aus Beschriftungen ins Instrument übernehmen.
+   Erkennung (Auswahlstelle): Zeile enthält "in-ear"/"inear"; "wired"/"kabel" = wired, sonst Funk;
+   folgt eine Zeile mit "XLR", wird sie zum Zusatz. Läuft nur für Instrumente ohne Feld inEar. */
+function migrateInEar(st){
+  const mains = mainLabels(st);
+  st.instruments.forEach(ins => {
+    if (ins.inEar !== undefined) return;                   // schon neues Format
+    ins.inEar = null;                                      // Standard: kein In-Ear
+    const lab = st.stage.find(x => x.id === mains[ins.id]);
+    if (!lab || !Array.isArray(lab.lines)) return;
+    const i = lab.lines.findIndex((s, k) => k > 0 && /in-?\s?ear/i.test(s));
+    if (i < 0) return;
+    const type = /wired|kabel/i.test(lab.lines[i]) ? 'wired' : 'funk';
+    const hasNote = /xlr/i.test(lab.lines[i + 1] || '');
+    ins.inEar = { type, note: hasNote ? lab.lines[i + 1] : '' };
+    lab.lines.splice(i, hasNote ? 2 : 1);                  // Zeilen aus der Beschriftung entfernen (werden automatisch angezeigt)
+  });
+  return st;
+}
 
 /* ============================================================================
    SYMBOLE – lokale Koordinaten in PE: Mitte = 0/0 (Label: linke obere Ecke)
@@ -226,8 +266,8 @@ const SHAPES = {
     txt(g, 0, 4, 'DI', 10.5, true, '#FFFFFF', {'text-anchor':'middle'});
   },
   /* Beschriftung: Karte mit dunklem Balken links; Zeile 1 fett, weitere normal */
-  label(g, it){
-    const lines = (it.lines && it.lines.length) ? it.lines : ['Neu'];
+  label(g, it, linesOverride){
+    const lines = linesOverride || ((it.lines && it.lines.length) ? it.lines : ['Neu']);   // inkl. In-Ear-Zeilen aus drawStage
     const h = 15 + 16 * lines.length;                      // 31 / 47 / 63 PE für 1 / 2 / 3 Zeilen
     let maxW = 0;
     lines.forEach((s, i) => { maxW = Math.max(maxW, tw(s, i ? 12 : 14, i === 0, 'RiderPlan')); });
@@ -255,10 +295,12 @@ function drawStage(root, st, opts){
   el('rect',{x:7, y:34.5, width:695.5, height:740, rx:7, fill:'#FFFFFF', stroke:C.navy, 'stroke-width':2.2, class:'stage-floor'}, root);
   /* Elemente in Reihenfolge (unten -> oben) */
   const layer = el('g',{class:'items'}, root);
+  const mains = mainLabels(st);                            // Träger der In-Ear-Zeilen
   st.stage.forEach(it => {
     if (!isVisible(st, it)) return;                        // abgewählte Instrumente überspringen
     const g = el('g',{class:'item', 'data-id':it.id, transform:itemTransform(it)}, layer);
-    (SHAPES[it.type] || SHAPES.label)(g, it);              // unbekannter Typ -> als Beschriftung zeichnen
+    if (it.type === 'label' || !SHAPES[it.type]) SHAPES.label(g, it, labelLines(st, it, mains)); // unbekannter Typ -> als Beschriftung
+    else SHAPES[it.type](g, it);
     if (opts.interactive) addHitArea(g);                   // grössere Trefferfläche für Finger
     if (opts.interactive && it.id === opts.selectedId) markSelected(g);
   });

@@ -13,9 +13,14 @@ Interaktiver Rider-Editor für die Band. Instrumente an-/abwählen, Bühnenplan 
 2. **Instrumente an/aus:** oben die Instrumente antippen. Das wirkt auf den Bühnenplan und die Instrumentenübersicht.
 3. **Bühnenplan:** Element antippen = auswählen, ziehen = verschieben. Die Leiste unten dreht, ändert die Grösse, bearbeitet, dupliziert oder löscht.
    Auf dem Handy die Ansicht «Bühne» oder «Bühne 2×» wählen.
-4. **Texte, Kontakte, «Stand»-Datum:** Seitenleiste → «Texte & Kontakte».
-5. **PDF:** Knopf «PDF» → 2 Seiten A4, fertig zum Versenden an Veranstalter.
-6. **Rückgängig:** ↶ oben.
+4. **Hinzufügen (z.B. Monitor):** leere Bühnenfläche antippen → Element wählen; es erscheint genau dort.
+   Oder über dem Plan «+ Monitor» bzw. «+ Element» (Bühnenmitte). Löschen: Element antippen → 🗑 zweimal.
+5. **In-Ear pro Musiker:** ein Element des Instruments antippen (Beschriftung, Mikrofon, Verstärker …) → 🎧 →
+   «Funk In-Ear» oder «wired In-Ear» wählen, Zusatzzeile anpassen (z.B. «XLR auf Bühne»).
+   Die Angabe erscheint automatisch in der Beschriftung des Instruments und im PDF. Auch unter «Instrumente verwalten» einstellbar.
+6. **Texte, Kontakte, «Stand»-Datum:** Seitenleiste → «Texte & Kontakte».
+7. **PDF:** Knopf «PDF» → 2 Seiten A4, fertig zum Versenden an Veranstalter.
+8. **Rückgängig:** ↶ oben.
 
 Eigene Änderungen bleiben nur im eigenen Browser, der offizielle Stand ändert sich dadurch nicht.
 Wer eine Änderung für alle will: Knopf «Stand-Datei» → die Datei `rider.enc.json` an Tom schicken.
