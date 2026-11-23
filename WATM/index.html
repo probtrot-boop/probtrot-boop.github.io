@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  Rider-Editor «Werli and the Melodies» – Startseite (Markup + Gestaltung)
+  ----------------------------------------------------------------------------
+  Zweck:    Technischen Rider schnell anpassen: Bühnenelemente verschieben,
+            Instrumente an/abwählen, Texte ändern, speichern, PDF erzeugen.
+  Dateien:  js/core.js    Standardstand + Zeichnen der zwei A4-Seiten (SVG)
+            js/editor.js  Bedienung (Auswahl, Ziehen, Panels, Speichern)
+            js/pdf.js     PDF-Export (jsPDF + svg2pdf, lädt lib/ bei Bedarf)
+            data/rider.json  gespeicherter Stand (wird beim Speichern ersetzt)
+            fonts/*.ttf   RiderText = Carlito (wie Calibri), RiderPlan = Lato
+  Annahmen: Läuft als Claude-Artefakt (Speichern/Download über claude.use)
+            oder lokal über einen Webserver (dann Speichern nur als Entwurf).
+  ============================================================================
+-->
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Rider-Editor – Werli and the Melodies</title>
+<style>
+/* ===== SCHRIFTEN (eigene Dateien des Artefakts) ===== */
+@font-face{font-family:"RiderText";font-weight:400;src:url(fonts/RiderText-Regular.ttf) format("truetype")}
+@font-face{font-family:"RiderText";font-weight:700;src:url(fonts/RiderText-Bold.ttf) format("truetype")}
+@font-face{font-family:"RiderPlan";font-weight:400;src:url(fonts/RiderPlan-Regular.ttf) format("truetype")}
+@font-face{font-family:"RiderPlan";font-weight:700;src:url(fonts/RiderPlan-Bold.ttf) format("truetype")}
+
+/* ===== GRUNDLAGEN ===== */
+:root{--navy:#14202B;--orange:#C1832A;--tan:#D9CFB8;--cream:#FBF8F1;--slate:#3C4A57;--bg:#EEEBE4;--blue:#2F7DE1;--ok:#1F5C57;--bad:#B23A2E}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:"RiderPlan",system-ui,sans-serif;font-size:14px;color:var(--navy);background:var(--bg);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--tan);background:#fff;border-radius:8px;padding:7px 11px;min-height:36px;line-height:1.1}
+button:hover{border-color:var(--slate)}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+button.accent{background:var(--orange);color:#fff;border-color:var(--orange)}
+button.danger{color:var(--bad);border-color:#e5b8b2}
+button.danger.armed{background:var(--bad);color:#fff}
+input[type=text],input[type=number],select,textarea{width:100%;border:1px solid var(--tan);border-radius:7px;padding:7px 9px;background:#fff}
+textarea{resize:vertical;min-height:64px}
+label.f{display:block;font-size:12px;color:var(--slate);margin:8px 0 3px}
+
+/* ===== KOPFLEISTE ===== */
+.bar{position:sticky;top:0;z-index:20;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 12px;background:var(--navy);color:#fff}
+.bar .brand{font-weight:700;font-size:15px;white-space:nowrap}
+.bar .brand small{display:block;font-weight:400;font-size:11.5px;color:#D8D2C4}
+.bar .actions{display:flex;gap:6px;flex-wrap:wrap}
+.bar button{background:transparent;color:#fff;border-color:#3b4a58}
+.bar button.accent{background:var(--orange);border-color:var(--orange)}
+.bar button.save{background:#fff;color:var(--navy);border-color:#fff}
+#status.dirty{color:#F4C430}
+
+/* ===== MELDUNGSZEILE ===== */
+.banner{margin:10px 12px 0;padding:10px 12px;border-radius:9px;background:#FFF6DD;border:1px solid #EBD38F;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.banner[hidden]{display:none}
+
+/* ===== LAYOUT: einspaltig (Handy), zweispaltig ab 1000 px ===== */
+.layout{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"chips" "stage" "side" "p1";gap:12px;padding:12px;max-width:1260px;margin:0 auto}
+.a-chips{grid-area:chips}.a-stage{grid-area:stage}.a-side{grid-area:side}.a-p1{grid-area:p1}
+@media (min-width:1000px){
+  .layout{grid-template-columns:minmax(0,1fr) 370px;grid-template-areas:"chips side" "stage side" "p1 side";align-items:start}
+  .a-side{position:sticky;top:64px;max-height:calc(100vh - 76px);overflow:auto}
+}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(20,32,43,.12)}
+.sheet{background:#fff;box-shadow:0 1px 6px rgba(20,32,43,.18);border-radius:2px;overflow:hidden}
+.sheet svg{display:block;width:100%;height:auto}
+.caption{font-size:12px;color:var(--slate);margin:6px 2px 0}
+
+/* ===== INSTRUMENT-CHIPS ===== */
+.a-chips{padding:10px 12px}
+.a-chips .t{font-size:12px;color:var(--slate);margin-bottom:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border-radius:999px;padding:6px 11px;min-height:34px;border:1.5px solid var(--navy);background:var(--navy);color:#fff;font-size:13px}
+.chip.off{background:#fff;color:#8a8f95;border-color:#c9c4b8;text-decoration:line-through}
+
+/* ===== ANSICHTSWAHL Bühnenplan ===== */
+.viewbar{display:flex;gap:6px;align-items:center;margin:0 0 8px}
+.viewbar button{min-height:32px;padding:5px 10px;font-size:13px}
+.viewbar button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+#stageSheet.zoom2{overflow:auto;-webkit-overflow-scrolling:touch;max-height:80vh}
+#stageSheet.zoom2 svg{width:200%;max-width:none}
+
+/* ===== BÜHNE: Ziehen ohne Seitenscrollen ===== */
+#page2 .item{cursor:grab;touch-action:none}
+#page2 .item:active{cursor:grabbing}
+#page2 .stage-floor{cursor:default}
+
+/* ===== SEITENPANEL ===== */
+.a-side{padding:4px 0}
+details{border-bottom:1px solid #eee5d3}
+details:last-child{border-bottom:0}
+summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"▸";color:var(--slate);transition:transform .15s}
+details[open] summary::after{transform:rotate(90deg)}
+.pane{padding:0 14px 14px}
+.grid-btn{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid-btn button{font-size:12.5px;padding:6px 4px}
+.row{display:flex;gap:6px;align-items:center}
+.row > *{flex:1}
+.row > .fix{flex:0 0 auto}
+.muted{color:var(--slate);font-size:12px}
+.list{display:flex;flex-direction:column;gap:8px}
+.irow{border:1px solid #eee5d3;border-radius:9px;padding:8px;display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center}
+.irow .sub{grid-column:2 / 4}
+.irow input[type=checkbox],.chk{width:20px;height:20px;accent-color:var(--navy)}
+.drow{display:grid;grid-template-columns:1fr 70px auto;gap:6px}
+hr.sep{border:0;border-top:1px solid #eee5d3;margin:12px 0}
+
+/* ===== AUSWAHL-LEISTE (unten fixiert) ===== */
+.selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px,env(safe-area-inset-bottom));z-index:30;background:var(--navy);color:#fff;border-radius:14px;padding:8px;display:flex;gap:5px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.3);max-width:calc(100vw - 16px);overflow-x:auto}
+.selbar[hidden]{display:none}
+.selbar .nm{font-size:12px;padding:0 6px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selbar button{background:transparent;color:#fff;border-color:#3b4a58;min-width:38px;padding:6px 8px;flex:0 0 auto}
+.selbar button.danger{color:#ffb4aa}
+.selbar button.danger.armed{background:var(--bad);color:#fff}
+@media (max-width:430px){.selbar .nm{display:none}}   /* schmale Handys: nur Knöpfe */
+
+/* ===== MELDUNG (Toast) ===== */
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:70px;z-index:40;background:#222;color:#fff;padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+.toast.show{opacity:.95}
+
+/* ===== SPERRBILDSCHIRM (Passwort) ===== */
+body.locked .bar .actions,body.locked .layout,body.locked .banner{display:none !important}
+.lock{max-width:380px;margin:12vh auto 0;padding:22px 20px;background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(20,32,43,.18)}
+.lock[hidden]{display:none}
+.lock h2{margin:0 0 4px;font-size:19px}
+.lock .err{color:var(--bad);font-size:13px;min-height:18px;margin-top:8px}
+.lock button{width:100%;margin-top:12px}
+.help ol{margin:0;padding-left:20px}
+.help li{margin:4px 0}
+
+/* ===== DRUCK (nur lokal nutzbar; im Artefakt PDF-Knopf verwenden) ===== */
+@page{size:A4;margin:0}
+@media print{
+  body{background:#fff}
+  .bar,.banner,.a-chips,.a-side,.selbar,.toast,.caption,.viewbar{display:none !important}
+  .layout{display:flex;flex-direction:column;padding:0;max-width:none;gap:0}
+  .sheet{box-shadow:none;border-radius:0;width:210mm;height:297mm;break-after:page}
+  .a-p1{order:-1}
+  .sel-box{display:none}
+}
+</style>
+</head>
+<body>
+<!-- ===== KOPFLEISTE ===== -->
+<header class="bar">
+  <div class="brand">Rider-Editor <small><span id="status">–</span></small></div>
+  <div class="actions">
+    <button id="bUndo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig">↶</button>
+    <button id="bRedo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen">↷</button>
+    <button id="bSave" class="save" title="Stand im Artefakt speichern">Speichern</button>
+    <button id="bPdf" class="accent" title="Rider als PDF herunterladen">PDF</button>
+  </div>
+</header>
+<div id="banner" class="banner" hidden></div>
+
+<!-- ===== SPERRE: nur bei verschlüsseltem Stand (GitHub) ===== -->
+<form id="lock" class="lock" hidden autocomplete="on">
+  <h2>Rider WATM</h2>
+  <p class="muted">Technischer Rider «Werli and the Melodies». Zugang nur für die Band – Passwort von Tom.</p>
+  <input type="text" name="username" value="WATM" autocomplete="username" hidden>
+  <label class="f" for="pw">Passwort</label>
+  <input type="password" id="pw" autocomplete="current-password" style="width:100%;border:1px solid var(--tan);border-radius:7px;padding:9px">
+  <label class="row muted" style="margin-top:10px"><input type="checkbox" id="pwRemember" class="chk fix" checked> Auf diesem Gerät merken</label>
+  <button type="submit" class="primary" id="pwGo">Öffnen</button>
+  <div class="err" id="pwErr"></div>
+</form>
+
+<main class="layout">
+  <!-- Instrumente an/aus -->
+  <section class="card a-chips">
+    <div class="t">Instrumente an/aus – wirkt auf Bühnenplan und Instrumentenübersicht</div>
+    <div id="chips" class="chips"></div>
+  </section>
+
+  <!-- Seite 2: Bühnenplan (bearbeitbar) -->
+  <section class="a-stage">
+    <div class="viewbar" id="viewbar">
+      <span class="muted">Ansicht:</span>
+      <button type="button" data-view="page">Seite</button>
+      <button type="button" data-view="stage">Bühne</button>
+      <button type="button" data-view="stage2">Bühne 2×</button>
+    </div>
+    <div class="sheet" id="stageSheet"><svg id="page2" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Seite 2 Bühnenplan"></svg></div>
+    <p class="caption">Antippen = auswählen · Ziehen = verschieben · leere Fläche = Auswahl aufheben</p>
+  </section>
+
+  <!-- Seitenpanel -->
+  <aside class="card a-side">
+    <details id="secHelp" class="help"><summary>Anleitung</summary><div class="pane" id="helpPane"></div></details>
+    <details open id="secAdd"><summary>Element hinzufügen</summary><div class="pane">
+      <div class="grid-btn" id="addBtns"></div>
+      <label class="row muted" style="margin-top:10px"><input type="checkbox" id="snap" class="chk fix" checked> Am Raster ausrichten (5 Einheiten)</label>
+    </div></details>
+    <details id="secSel"><summary>Ausgewähltes Element</summary><div class="pane" id="selPane"></div></details>
+    <details id="secInstr"><summary>Instrumente verwalten</summary><div class="pane" id="instrPane"></div></details>
+    <details id="secDrums"><summary>Schlagzeug-Setup</summary><div class="pane" id="drumPane"></div></details>
+    <details id="secTexts"><summary>Texte &amp; Kontakte</summary><div class="pane" id="textPane"></div></details>
+    <details id="secData"><summary>Daten &amp; Sicherung</summary><div class="pane" id="dataPane"></div></details>
+  </aside>
+
+  <!-- Seite 1: Vorschau -->
+  <section class="a-p1">
+    <div class="sheet"><svg id="page1" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Seite 1 Instrumentenübersicht"></svg></div>
+    <p class="caption">Seite 1 – Texte unter «Texte &amp; Kontakte», Instrumente unter «Instrumente verwalten»</p>
+  </section>
+</main>
+
+<!-- Leiste für das gewählte Element -->
+<div id="selbar" class="selbar" hidden>
+  <span class="nm" id="selName"></span>
+  <button data-act="rotL" title="15° links drehen">⟲</button>
+  <button data-act="rotR" title="15° rechts drehen">⟳</button>
+  <button data-act="smaller" title="kleiner">−</button>
+  <button data-act="bigger" title="grösser">+</button>
+  <button data-act="edit" title="Eigenschaften bearbeiten">✎</button>
+  <button data-act="dup" title="duplizieren">⧉</button>
+  <button data-act="del" class="danger" title="löschen">🗑</button>
+  <button data-act="close" title="Auswahl aufheben">✕</button>
+</div>
+<div id="toast" class="toast"></div>
+
+<script src="js/core.js"></script>
+<script src="js/crypto.js"></script>
+<script src="js/pdf.js"></script>
+<script src="js/editor.js"></script>
+</body>
+</html>

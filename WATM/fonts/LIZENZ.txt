@@ -1,0 +1,6 @@
+Schriften in diesem Ordner – Lizenzhinweis
+==========================================
+RiderText-*.ttf  = verkleinerte und umbenannte Fassung von "Carlito" (Copyright 2013 The Carlito Project Authors),
+RiderPlan-*.ttf  = verkleinerte und umbenannte Fassung von "Lato"    (Copyright 2010-2011 tyPoland Łukasz Dziedzic).
+Beide stehen unter der SIL Open Font License 1.1: https://openfontlicense.org
+Die Umbenennung erfolgt, weil die Originalnamen als "Reserved Font Name" geschützt sind.
