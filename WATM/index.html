@@ -26,6 +26,7 @@
 @font-face{font-family:"RiderText";font-weight:700;src:url(fonts/RiderText-Bold.ttf) format("truetype")}
 @font-face{font-family:"RiderPlan";font-weight:400;src:url(fonts/RiderPlan-Regular.ttf) format("truetype")}
 @font-face{font-family:"RiderPlan";font-weight:700;src:url(fonts/RiderPlan-Bold.ttf) format("truetype")}
+@font-face{font-family:"RiderChalk";font-weight:400;src:url(fonts/RiderChalk.woff2) format("woff2");font-display:block}   /* Kreide-Titel Vorhang */
 
 /* ===== GRUNDLAGEN ===== */
 :root{--navy:#14202B;--orange:#C1832A;--tan:#D9CFB8;--cream:#FBF8F1;--slate:#3C4A57;--bg:#EEEBE4;--blue:#2F7DE1;--ok:#1F5C57;--bad:#B23A2E}
@@ -144,9 +145,36 @@ body.locked .bar .actions,body.locked .layout,body.locked .banner{display:none !
 
 /* ===== DRUCK (nur lokal nutzbar; im Artefakt PDF-Knopf verwenden) ===== */
 @page{size:A4;margin:0}
+/* ===== START: Editor erst zeigen, wenn Vorhang oder Passwortfeld steht ===== */
+body.booting .layout,body.booting .banner,body.booting .bar .actions{visibility:hidden}
+
+/* ===== VORHANG (Bild teilt sich in der Mitte und geht zur Seite auf) ===== */
+.curtain{position:fixed;inset:0;z-index:100;overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.curtain[hidden]{display:none}
+.c-half{position:absolute;top:0;bottom:0;width:50%;overflow:hidden;transition:transform 1.1s cubic-bezier(.7,0,.25,1);will-change:transform}
+.c-left{left:0}
+.c-right{right:0}
+.curtain.open .c-left{transform:translateX(-102%);box-shadow:6px 0 18px rgba(0,0,0,.45)}    /* Kantenschatten erst beim Öffnen: geschlossen keine Naht */
+.curtain.open .c-right{transform:translateX(102%);box-shadow:-6px 0 18px rgba(0,0,0,.45)}
+.c-scene{position:absolute;top:0;width:100vw;height:100%;background:radial-gradient(ellipse at 60% 40%,#5a5a5a,#232323 75%)}
+.c-left .c-scene{left:0}                                     /* linke Hälfte zeigt linke Szenenhälfte */
+.c-right .c-scene{right:0}                                   /* rechte Hälfte zeigt rechte Szenenhälfte */
+.c-scene img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:60% 30%}
+.c-title{position:absolute;left:0;right:0;bottom:7%;text-align:center;font-family:"RiderChalk",cursive;color:#f2f2f2;
+  font-size:clamp(44px,8vw,104px);line-height:1;transform:rotate(-2deg);text-shadow:0 0 10px rgba(255,255,255,.35),0 3px 14px rgba(0,0,0,.75)}
+@media (min-aspect-ratio:8/5){.c-scene img{object-fit:contain;object-position:50% 50%}}   /* sehr breite Bildschirme: Formel nicht abschneiden */
+@media (orientation:portrait){                               /* Handy hochkant: ganzes Bild zeigen, Titel darunter */
+  .c-scene img{top:50%;bottom:auto;height:auto;transform:translateY(-62%);object-fit:contain}
+  .c-title{bottom:auto;top:calc(50% + 34vw);font-size:clamp(44px,15vw,90px)}
+}
+@media (prefers-reduced-motion:reduce){
+  .c-half{transition:opacity .3s}
+  .curtain.open .c-left,.curtain.open .c-right{transform:none;opacity:0}
+}
+
 @media print{
   body{background:#fff}
-  .bar,.banner,.a-chips,.a-side,.selbar,.toast,.caption,.viewbar{display:none !important}
+  .bar,.banner,.a-chips,.a-side,.selbar,.toast,.caption,.viewbar,.curtain{display:none !important}
   .layout{display:flex;flex-direction:column;padding:0;max-width:none;gap:0}
   .sheet{box-shadow:none;border-radius:0;width:210mm;height:297mm;break-after:page}
   .a-p1{order:-1}
@@ -154,7 +182,12 @@ body.locked .bar .actions,body.locked .layout,body.locked .banner{display:none !
 }
 </style>
 </head>
-<body>
+<body class="booting">
+<!-- ===== VORHANG: zwei Hälften mit derselben Szene (Bild + Titel) ===== -->
+<div id="curtain" class="curtain" hidden aria-hidden="true">
+  <div class="c-half c-left"><div class="c-scene"><img src="img/vorhang.jpg" alt=""><div class="c-title">Rider-Editor</div></div></div>
+  <div class="c-half c-right"><div class="c-scene"><img src="img/vorhang.jpg" alt=""><div class="c-title">Rider-Editor</div></div></div>
+</div>
 <!-- ===== KOPFLEISTE ===== -->
 <header class="bar">
   <div class="brand">Rider-Editor <small><span id="status">–</span></small></div>
@@ -236,6 +269,7 @@ body.locked .bar .actions,body.locked .layout,body.locked .banner{display:none !
 </div>
 <div id="toast" class="toast"></div>
 
+<script src="js/curtain.js"></script>
 <script src="js/core.js"></script>
 <script src="js/crypto.js"></script>
 <script src="js/pdf.js"></script>

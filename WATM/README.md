@@ -10,6 +10,7 @@ Interaktiver Rider-Editor für die Band. Instrumente an-/abwählen, Bühnenplan 
 ## Für die Band – so geht's
 
 1. Adresse öffnen, Passwort eingeben. Mit «Auf diesem Gerät merken» fragt die Seite auf diesem Gerät nicht mehr.
+   Danach erscheint der Vorhang (Tafel «E = Werli + the Melodies») und geht nach 1,5 s auf – Antippen öffnet sofort.
 2. **Instrumente an/aus:** oben die Instrumente antippen. Das wirkt auf den Bühnenplan und die Instrumentenübersicht.
 3. **Bühnenplan:** Element antippen = auswählen, ziehen = verschieben. Die Leiste unten dreht, ändert die Grösse, bearbeitet, dupliziert oder löscht.
    Auf dem Handy die Ansicht «Bühne» oder «Bühne 2×» wählen.
@@ -56,8 +57,9 @@ Danach gilt nur noch das neue Passwort; allen Bandmitgliedern neu mitteilen. So 
 | `js/editor.js` | Bedienung, Rückgängig, Entwurf, Laden/Entsperren, Stand-Datei |
 | `js/crypto.js` | Verschlüsselung: PBKDF2-SHA-256 (600 000 Durchläufe) → AES-GCM 256 |
 | `js/pdf.js` | PDF-Export (jsPDF + svg2pdf, Schriften eingebettet) |
+| `js/curtain.js`, `img/vorhang.jpg` | Vorhang beim Öffnen (Bild teilt sich in der Mitte) |
 | `data/rider.enc.json` | offizieller Stand, verschlüsselt |
-| `fonts/` | RiderText (aus Carlito), RiderPlan (aus Lato) – SIL OFL 1.1, siehe `fonts/LIZENZ.txt` |
+| `fonts/` | RiderText (aus Carlito), RiderPlan (aus Lato), RiderChalk (aus Gochi Hand) – SIL OFL 1.1, siehe `fonts/LIZENZ.txt` |
 | `lib/` | jsPDF 4.2.1, svg2pdf.js 2.9.0 (MIT-Lizenz) |
 
 Dieselbe Codebasis läuft auch als privates Claude-Artefakt. Dort liegt der Stand unverschlüsselt in `data/rider.json`, und «Speichern» schreibt direkt ins Artefakt.

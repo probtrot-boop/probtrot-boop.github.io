@@ -14,6 +14,7 @@
               - Datenquelle (Auswahlstelle in loadState): data/rider.json
                 (Klartext, privates Artefakt) -> sonst data/rider.enc.json
                 (verschlüsselt, GitHub; Passwortabfrage) -> sonst Standard.
+   Neu v2.2:  Vorhang beim Öffnen (curtain.js), nach dem Passwort.
    Neu v2.1:  Leere Bühnenfläche antippen (ohne Auswahl) öffnet dasselbe Menü
               direkt an dieser Stelle; das Element wird genau dort eingefügt.
    Neu v2:    «＋ Hinzufügen» direkt über dem Bühnenplan (fügt in der sichtbaren
@@ -833,7 +834,9 @@ async function boot(){
   try {
     await Promise.all(['400 12px "RiderText"','700 12px "RiderText"','400 12px "RiderPlan"','700 12px "RiderPlan"'].map(f => document.fonts.load(f)));
   } catch (e) { /* stiller Fallback: Ersatzschrift, Textbreiten ggf. ungenau */ }
-  await loadState();
+  await loadState();                                       // GitHub: Passwort zuerst
+  Curtain.show();                                          // danach geschlossener Vorhang über allem
+  document.body.classList.remove('booting');               // Editor darf jetzt (hinter dem Vorhang) erscheinen
   initAddPane(); initAddMenu(); initStage(); initSelbar(); initKeys(); initView();
   $('#bUndo').onclick = undo; $('#bRedo').onclick = redo;
   $('#bSave').onclick = onSave; $('#bPdf').onclick = exportPdf;
@@ -841,6 +844,7 @@ async function boot(){
   renderAll(); applyView();
   offerDraft();
   document.body.dataset.ready = '1';                       // Signal für automatische Tests
+  Curtain.openAfter(1500);                                 // Vorhang öffnet nach 1.5 s (Antippen: sofort)
   initCapabilities();
 }
 boot();

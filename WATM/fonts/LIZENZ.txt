@@ -4,3 +4,5 @@ RiderText-*.ttf  = verkleinerte und umbenannte Fassung von "Carlito" (Copyright 
 RiderPlan-*.ttf  = verkleinerte und umbenannte Fassung von "Lato"    (Copyright 2010-2011 tyPoland Łukasz Dziedzic).
 Beide stehen unter der SIL Open Font License 1.1: https://openfontlicense.org
 Die Umbenennung erfolgt, weil die Originalnamen als "Reserved Font Name" geschützt sind.
+RiderChalk.woff2 = verkleinerte und umbenannte Fassung von "Gochi Hand" (Copyright 2011 Huerta Tipográfica),
+                   SIL Open Font License 1.1 – nur für den Titel auf dem Vorhang.
